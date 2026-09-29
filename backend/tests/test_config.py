@@ -31,6 +31,11 @@ def _clear_rag_environment(monkeypatch: pytest.MonkeyPatch) -> None:
         "RAG_LLM_CONNECT_TIMEOUT_SECONDS",
         "RAG_LLM_TIMEOUT_SECONDS",
         "RAG_MIN_RETRIEVAL_SCORE",
+        "RAG_POSTGRES_USER",
+        "RAG_POSTGRES_PASSWORD",
+        "RAG_POSTGRES_DB",
+        "RAG_DATABASE_URL",
+        "RAG_QDRANT_URL",
     ):
         monkeypatch.delenv(name, raising=False)
 
@@ -112,6 +117,14 @@ def test_embedding_settings_default_to_local_e5() -> None:
     assert settings.llm_connect_timeout_seconds == 5.0
     assert settings.llm_timeout_seconds == 120.0
     assert settings.min_retrieval_score == 0.8
+    assert settings.postgres_user == "engine_rag"
+    assert settings.postgres_password == "engine_rag_local"
+    assert settings.postgres_db == "engine_rag"
+    assert (
+        settings.database_url
+        == "postgresql+asyncpg://engine_rag:engine_rag_local@127.0.0.1:5432/engine_rag"
+    )
+    assert settings.qdrant_url == "http://127.0.0.1:6333"
 
 
 def test_blank_model_cache_dir_is_none() -> None:
@@ -148,6 +161,35 @@ def test_get_settings_reads_llm_settings(monkeypatch: pytest.MonkeyPatch) -> Non
     assert settings.llm_connect_timeout_seconds == 2
     assert settings.llm_timeout_seconds == 30
     assert settings.min_retrieval_score == 0.8
+
+
+def test_get_settings_reads_infrastructure_settings(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("RAG_POSTGRES_USER", "rag_user")
+    monkeypatch.setenv("RAG_POSTGRES_PASSWORD", "rag_local")
+    monkeypatch.setenv("RAG_POSTGRES_DB", "rag_db")
+    monkeypatch.setenv(
+        "RAG_DATABASE_URL",
+        "postgresql+asyncpg://rag_user:rag_local@127.0.0.1:5432/rag_db",
+    )
+    monkeypatch.setenv("RAG_QDRANT_URL", "http://127.0.0.1:6333")
+
+    settings = get_settings()
+
+    assert settings.postgres_user == "rag_user"
+    assert settings.postgres_password == "rag_local"
+    assert settings.postgres_db == "rag_db"
+    assert settings.database_url == "postgresql+asyncpg://rag_user:rag_local@127.0.0.1:5432/rag_db"
+    assert settings.qdrant_url == "http://127.0.0.1:6333"
+
+
+def test_rejects_empty_database_url() -> None:
+    with pytest.raises(ValidationError):
+        _isolated().model_validate({"database_url": ""})
+
+
+def test_rejects_empty_qdrant_url() -> None:
+    with pytest.raises(ValidationError):
+        _isolated().model_validate({"qdrant_url": ""})
 
 
 def test_rejects_retrieval_score_outside_unit_interval() -> None:

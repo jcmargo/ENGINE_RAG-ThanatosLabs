@@ -1,6 +1,6 @@
 # Engine RAG
 
-Base local de **Engine RAG**, el producto RAG de **ThanatosLabs**. Este repositorio arranca un backend FastAPI y un frontend React. La generación local usa Ollama. PostgreSQL, Qdrant y Docker llegan en specs posteriores.
+Base local de **Engine RAG**, el producto RAG de **ThanatosLabs**. Este repositorio arranca un backend FastAPI y un frontend React. La generación local usa Ollama en el host. PostgreSQL y Qdrant locales se levantan con Docker Compose. Los contenedores de producción llegan en una spec posterior.
 
 Los comandos de esta guía están escritos para PowerShell.
 
@@ -10,6 +10,7 @@ Los comandos de esta guía están escritos para PowerShell.
 - Python 3.12
 - [uv](https://docs.astral.sh/uv/)
 - Node.js 22 LTS, con npm
+- Docker, para PostgreSQL y Qdrant locales
 
 Instalar uv:
 
@@ -63,6 +64,9 @@ Copy-Item .env.example .env
 - `RAG_LLM_CONNECT_TIMEOUT_SECONDS`: timeout de conexión. Default: `5`.
 - `RAG_LLM_TIMEOUT_SECONDS`: timeout total de la respuesta. Default: `120`.
 - `RAG_MIN_RETRIEVAL_SCORE`: umbral de evidencia. Default: `0.8`, calibrado con `data/sample`.
+- `RAG_POSTGRES_USER`, `RAG_POSTGRES_PASSWORD` y `RAG_POSTGRES_DB`: credencial local de PostgreSQL. Defaults: `engine_rag`, `engine_rag_local` y `engine_rag`.
+- `RAG_DATABASE_URL`: URL async de PostgreSQL. Default: `postgresql+asyncpg://engine_rag:engine_rag_local@127.0.0.1:5432/engine_rag`.
+- `RAG_QDRANT_URL`: URL HTTP de Qdrant. Default: `http://127.0.0.1:6333`.
 
 Sin `.env`, el proceso usa esos defaults. El archivo `.env` es opcional.
 
@@ -115,6 +119,35 @@ uv run python -m app.cli.local_rag --question "¿Cuántos días de descanso anua
 
 La salida incluye respuesta, abstención, citas, puntuaciones y latencias. Si Ollama está apagado, el comando termina con un mensaje para iniciarlo y no imprime una traza.
 
+## Datos locales
+
+Hace falta Docker. Desde la raíz del repositorio, levanta PostgreSQL 17.11 y Qdrant v1.19.1. Los puertos quedan en `127.0.0.1`. Ollama no entra en este Compose.
+
+```powershell
+docker compose -f infra/compose.local.yml up -d
+```
+
+Estado y logs:
+
+```powershell
+docker compose -f infra/compose.local.yml ps
+docker compose -f infra/compose.local.yml logs
+```
+
+Apagar los contenedores conserva los volúmenes:
+
+```powershell
+docker compose -f infra/compose.local.yml down
+```
+
+Este comando es destructivo. Borra los volúmenes locales de PostgreSQL y Qdrant, y con ellos los datos que hubiera dentro:
+
+```powershell
+docker compose -f infra/compose.local.yml down -v
+```
+
+Con los dos servicios en marcha, `GET /readyz` responde 200. `GET /healthz` responde 200 aunque estén apagados. `uv run pytest -m integration` comprueba esas conexiones y borra solo su fila y su colección de prueba.
+
 ## Calidad
 
 Desde la raíz del repositorio:
@@ -124,6 +157,7 @@ uv run pytest
 uv run ruff check .
 uv run ruff format --check .
 uv run mypy backend/app
+uv run pytest -m integration
 $env:RAG_LLM_MODEL = "qwen3.5:2b"
 uv run pytest -m ollama
 ```

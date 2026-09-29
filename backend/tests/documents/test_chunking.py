@@ -31,7 +31,7 @@ def test_default_overlap_is_fifteen_percent() -> None:
     assert DEFAULT_MAX_TOKENS == 500
     assert DEFAULT_OVERLAP_TOKENS == 75
     assert DEFAULT_OVERLAP_TOKENS == DEFAULT_MAX_TOKENS * 15 // 100
-    assert CHUNKER_VERSION == "chunker-v1"
+    assert CHUNKER_VERSION == "chunker-v2"
 
 
 def test_word_counter_splits_without_dropping_words() -> None:
@@ -236,6 +236,9 @@ def test_markdown_sections_follow_headings() -> None:
 
     assert "Vacaciones" in sections
     assert "Gastos" in sections
+    assert "descanso" in chunks[0].text
+    assert "descanso" not in chunks[1].text
+    assert "límite" not in chunks[0].text
 
 
 def test_single_token_chunks_cover_every_word() -> None:
@@ -248,6 +251,94 @@ def test_single_token_chunks_cover_every_word() -> None:
     )
 
     assert [chunk.text for chunk in chunks] == ["uno", "dos", "tres"]
+
+
+def test_two_headings_keep_each_body_in_its_own_chunk() -> None:
+    text = "Teorema 1.2\nEl grupo es abeliano.\nDemostración\nSe sigue del lema anterior."
+    chunks = chunk_document(
+        _document((text,)),
+        document_hash="h",
+        document_version="v1",
+        max_tokens=40,
+        overlap_tokens=10,
+    )
+
+    assert [chunk.section for chunk in chunks] == ["Teorema 1.2", "Demostración"]
+    assert "abeliano" in chunks[0].text
+    assert "lema" not in chunks[0].text
+    assert "abeliano" not in chunks[1].text
+    assert "lema" in chunks[1].text
+    assert all(chunk.page_start == chunk.page_end == 1 for chunk in chunks)
+
+
+def test_numbered_equation_stays_in_the_same_block() -> None:
+    text = "Teorema 1\nLa igualdad se mantiene.\n(8.5.5) Q A Q = D\n8.5.9 otra linea"
+    chunks = chunk_document(
+        _document((text,)),
+        document_hash="h",
+        document_version="v1",
+        max_tokens=40,
+        overlap_tokens=5,
+    )
+
+    assert len(chunks) == 1
+    assert chunks[0].section == "Teorema 1"
+    assert "8.5.5" in chunks[0].text
+    assert "8.5.9" in chunks[0].text
+    assert "igualdad" in chunks[0].text
+
+
+def test_single_heading_still_overlaps() -> None:
+    words = [f"w{index}" for index in range(40)]
+    chunks = chunk_document(
+        _document(("# Unico\n\n" + " ".join(words),)),
+        document_hash="h",
+        document_version="v1",
+        max_tokens=10,
+        overlap_tokens=4,
+    )
+    counter = WordTokenCounter()
+
+    assert len(chunks) > 1
+    assert all(chunk.section == "Unico" for chunk in chunks)
+    assert all(counter.count(chunk.text) <= 10 for chunk in chunks)
+    assert any(right.text.split()[:4] == left.text.split()[-4:] for left, right in pairwise(chunks))
+    present = {word for chunk in chunks for word in chunk.text.split()}
+    assert set(words) <= present
+
+
+def test_overlap_does_not_cross_a_heading() -> None:
+    body = " ".join(f"w{index}" for index in range(30))
+    text = f"Teorema 1\n{body}\nDemostración\nSe sigue del lema."
+    chunks = chunk_document(
+        _document((text,)),
+        document_hash="h",
+        document_version="v1",
+        max_tokens=10,
+        overlap_tokens=4,
+    )
+    statement = [chunk.text for chunk in chunks if chunk.section == "Teorema 1"]
+    proof = [chunk.text for chunk in chunks if chunk.section == "Demostración"]
+
+    assert statement
+    assert proof == ["Demostración Se sigue del lema."]
+    assert all("lema" not in text for text in statement)
+    assert all("w29" not in text.split() for text in proof)
+
+
+def test_single_title_stays_one_block() -> None:
+    text = "# Política\n\nEl personal tiene 18 días hábiles de descanso."
+    chunks = chunk_document(
+        _document((text,)),
+        document_hash="h",
+        document_version="v1",
+        max_tokens=500,
+        overlap_tokens=75,
+    )
+
+    assert len(chunks) == 1
+    assert chunks[0].section == "Política"
+    assert "18 días hábiles" in chunks[0].text
 
 
 def test_rejects_overlap_that_would_not_advance() -> None:

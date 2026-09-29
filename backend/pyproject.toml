@@ -4,12 +4,17 @@ version = "0.1.0"
 description = "API de Engine RAG (ThanatosLabs)."
 requires-python = ">=3.12,<3.13"
 dependencies = [
+    "alembic>=1.20.0",
+    "asyncpg>=0.31.0",
     "fastapi>=0.115.6",
+    "greenlet>=3.5.6",
     "httpx>=0.28.1",
     "pydantic-settings>=2.7.1",
     "pymupdf>=1.25.5",
     "python-docx>=1.1.2",
+    "qdrant-client>=1.19.1",
     "sentence-transformers>=6.1.0",
+    "sqlalchemy>=2.1.1",
     "uvicorn>=0.34.0",
 ]
 

@@ -11,6 +11,12 @@ from app.documents.normalize import normalize_text
 from app.documents.versions import CHUNKER_VERSION, DEFAULT_MAX_TOKENS, DEFAULT_OVERLAP_TOKENS
 
 _HEADING = re.compile(r"^#{1,6}[ \t]+(\S.*?)\s*$")
+_SECTION_LABEL = re.compile(
+    r"^(definici[oó]n|teorema|proposici[oó]n|lema|corolario|ejemplo|"
+    r"demostraci[oó]n|ejercicio|secci[oó]n|art[ií]culo|cl[aá]usula|paso)"
+    r"(?!\w)(?:[ \t]+(\d+(?:[ \t]*\.[ \t]*\d+)*))?",
+    re.IGNORECASE,
+)
 
 
 class TokenCounter(Protocol):
@@ -51,6 +57,7 @@ class _Word:
     text: str
     paragraph_index: int
     section: str | None
+    block: int
 
 
 def document_content_hash(content: bytes) -> str:
@@ -80,29 +87,30 @@ def chunk_document(
     position = 0
     for page in document.pages:
         page_words = _page_words(page, token_counter, max_tokens)
-        for words in _windows(page_words, token_counter, max_tokens, overlap_tokens):
-            text = _chunk_text(words)
-            if not text:
-                continue
-            chunks.append(
-                Chunk(
-                    id=_chunk_id(
-                        document_hash=document_hash,
-                        document_version=document_version,
-                        page=page.number,
-                        position=position,
+        for block in _blocks(page_words):
+            for words in _windows(block, token_counter, max_tokens, overlap_tokens):
+                text = _chunk_text(words)
+                if not text:
+                    continue
+                chunks.append(
+                    Chunk(
+                        id=_chunk_id(
+                            document_hash=document_hash,
+                            document_version=document_version,
+                            page=page.number,
+                            position=position,
+                            text=text,
+                            chunker_version=chunker_version,
+                        ),
                         text=text,
+                        page_start=page.number,
+                        page_end=page.number,
+                        section=words[0].section,
+                        position=position,
                         chunker_version=chunker_version,
-                    ),
-                    text=text,
-                    page_start=page.number,
-                    page_end=page.number,
-                    section=words[0].section,
-                    position=position,
-                    chunker_version=chunker_version,
+                    )
                 )
-            )
-            position += 1
+                position += 1
     return tuple(chunks)
 
 
@@ -129,10 +137,44 @@ def _chunk_id(
 
 
 def _heading_text(paragraph: str) -> str | None:
-    match = _HEADING.match(paragraph)
-    if match is None:
+    line = paragraph.split("\n", 1)[0].strip()
+    markdown = _HEADING.match(line)
+    if markdown is not None:
+        return markdown.group(1).strip()
+    label = _SECTION_LABEL.match(line)
+    if label is None:
         return None
-    return match.group(1).strip()
+    number = label.group(2)
+    if number is None:
+        return label.group(1)
+    compact = re.sub(r"\s*\.\s*", ".", number.strip())
+    return f"{label.group(1)} {compact}"
+
+
+def _opens_section(line: str) -> bool:
+    return _heading_text(line) is not None
+
+
+def _paragraphs(text: str) -> tuple[str, ...]:
+    """Parte por líneas en blanco y por cada línea que abre sección."""
+    paragraphs: list[str] = []
+    bucket: list[str] = []
+
+    def flush() -> None:
+        if bucket:
+            paragraphs.append("\n".join(bucket))
+            bucket.clear()
+
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            flush()
+            continue
+        if bucket and _opens_section(stripped):
+            flush()
+        bucket.append(stripped)
+    flush()
+    return tuple(paragraphs)
 
 
 def _page_words(
@@ -140,15 +182,15 @@ def _page_words(
     counter: TokenCounter,
     max_tokens: int,
 ) -> tuple[_Word, ...]:
-    paragraphs = tuple(
-        part.strip() for part in re.split(r"\n{2,}", page.text.strip()) if part.strip()
-    )
+    paragraphs = _paragraphs(page.text.strip())
     section = page.section
+    block = 0
     words: list[_Word] = []
     for index, paragraph in enumerate(paragraphs):
         heading = _heading_text(paragraph)
         if heading is not None:
             section = heading
+            block += 1
         pieces = (
             (paragraph,)
             if counter.count(paragraph) <= max_tokens
@@ -163,9 +205,22 @@ def _page_words(
                         text=token,
                         paragraph_index=index,
                         section=section,
+                        block=block,
                     )
                 )
     return tuple(words)
+
+
+def _blocks(words: Sequence[_Word]) -> Iterator[tuple[_Word, ...]]:
+    """Agrupa palabras de un mismo bloque para que el solapamiento no lo cruce."""
+    if not words:
+        return
+    start = 0
+    for index in range(1, len(words)):
+        if words[index].block != words[start].block:
+            yield tuple(words[start:index])
+            start = index
+    yield tuple(words[start:])
 
 
 def _windows(

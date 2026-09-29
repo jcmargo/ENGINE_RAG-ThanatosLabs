@@ -68,6 +68,14 @@ class Settings(BaseSettings):
     # 0.8 separa las tres preguntas de data/sample (mínimo observado 0.857)
     # de preguntas fuera de dominio (máximo observado 0.753).
     min_retrieval_score: float = Field(default=0.8, ge=0.0, le=1.0)
+    postgres_user: str = Field(default="engine_rag", min_length=1)
+    postgres_password: str = Field(default="engine_rag_local", min_length=1)
+    postgres_db: str = Field(default="engine_rag", min_length=1)
+    database_url: str = Field(
+        default="postgresql+asyncpg://engine_rag:engine_rag_local@127.0.0.1:5432/engine_rag",
+        min_length=1,
+    )
+    qdrant_url: str = Field(default="http://127.0.0.1:6333", min_length=1)
 
     @field_validator("model_cache_dir", mode="before")
     @classmethod

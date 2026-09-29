@@ -68,7 +68,8 @@ def test_supported_formats_produce_extracted_documents(
 
     assert document.name == name
     assert document.mime_type == mime_type
-    assert document.parser_version == "parser-v1"
+    expected_parser = "parser-v2" if name.endswith(".pdf") else "parser-v1"
+    assert document.parser_version == expected_parser
     assert document.pages
     assert all(page.number >= 1 for page in document.pages)
     assert expected in "\n".join(page.text for page in document.pages)

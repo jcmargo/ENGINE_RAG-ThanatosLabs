@@ -39,7 +39,9 @@ def build_user_prompt(question: str, evidence: Sequence[LocalSearchHit]) -> str:
         "la respuesta. Si ninguna fuente contiene el dato, abstente.\n"
         "Si la pregunta nombra un teorema, artículo, cláusula, paso o sección, "
         "answer es el enunciado que sigue a ese rótulo, no otro número vecino.\n"
-        "Si la pregunta pide una cantidad, answer copia la cifra y la unidad tal como aparecen.\n\n"
+        "Si la pregunta pide una cantidad, answer copia la cifra y la unidad tal como aparecen.\n"
+        "Si varias fuentes tocan la pregunta, answer sale de la que enuncia el dato "
+        "y cited_chunk_ids cita solo esa. No se completa con la sección siguiente.\n\n"
         "Forma obligatoria, sin texto alrededor:\n"
         '{"answer": "enunciado o dato copiado de la fuente", '
         f'"abstained": false, "cited_chunk_ids": ["{example_id}"]}}\n'

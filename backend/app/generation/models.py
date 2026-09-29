@@ -6,7 +6,7 @@ from app.retrieval.sample_search import LocalSearchHit
 
 PUBLIC_ABSTENTION = "No está en los documentos disponibles"
 RETRIEVAL_VERSION = "retrieval-v2"
-PROMPT_VERSION = "prompt-v3"
+PROMPT_VERSION = "prompt-v4"
 
 
 @dataclass(frozen=True)

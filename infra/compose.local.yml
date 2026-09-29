@@ -1,0 +1,42 @@
+name: engine-rag
+
+services:
+  postgres:
+    image: postgres:17.11
+    environment:
+      POSTGRES_USER: ${RAG_POSTGRES_USER:-engine_rag}
+      POSTGRES_PASSWORD: ${RAG_POSTGRES_PASSWORD:-engine_rag_local}
+      POSTGRES_DB: ${RAG_POSTGRES_DB:-engine_rag}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - engine_rag_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  qdrant:
+    image: qdrant/qdrant:v1.19.1
+    ports:
+      - "127.0.0.1:6333:6333"
+    volumes:
+      - engine_rag_qdrant_data:/qdrant/storage
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          'bash -c "exec 3<>/dev/tcp/127.0.0.1/6333 && printf \"GET /readyz HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n\" >&3 && grep -q \"200 OK\" <&3"',
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+volumes:
+  engine_rag_postgres_data:
+    name: engine_rag_postgres_data
+  engine_rag_qdrant_data:
+    name: engine_rag_qdrant_data

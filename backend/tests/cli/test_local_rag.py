@@ -91,7 +91,7 @@ def test_format_includes_answer_citations_scores_and_latencies() -> None:
     assert "recuperación_ms\t12.500" in text
     assert "generación_ms\t30.000" in text
     assert "LLM:\tsí" in text
-    assert "prompt-v3" in text
+    assert "prompt-v4" in text
 
 
 def test_main_prints_an_abstention(
