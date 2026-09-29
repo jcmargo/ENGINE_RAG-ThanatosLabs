@@ -1,0 +1,56 @@
+[project]
+name = "engine-rag"
+version = "0.1.0"
+description = "Workspace de Engine RAG (ThanatosLabs)."
+requires-python = ">=3.12,<3.13"
+dependencies = ["engine-rag-backend"]
+
+[project.optional-dependencies]
+dev = ["engine-rag-backend[dev]"]
+
+[tool.uv.workspace]
+members = ["backend"]
+
+[tool.uv.sources]
+engine-rag-backend = { workspace = true }
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["backend/app", "backend/tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "ANN", "RUF", "ASYNC"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
+
+[tool.pytest.ini_options]
+testpaths = ["backend/tests"]
+pythonpath = ["backend"]
+addopts = ["-q", "-m", "not integration and not model and not load and not ollama"]
+markers = [
+    "integration: dependencias externas reales; queda fuera de la suite por defecto",
+    "model: carga de modelos; queda fuera de la suite por defecto",
+    "load: pruebas de carga; queda fuera de la suite por defecto",
+    "ollama: generación con Ollama local; queda fuera de la suite por defecto",
+]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+pretty = true
+show_error_codes = true
+plugins = ["pydantic.mypy"]
+explicit_package_bases = true
+namespace_packages = true
+mypy_path = "backend"
+files = ["backend/app"]
+
+[tool.pydantic-mypy]
+init_forbid_extra = true
+init_typed = true
+warn_required_dynamic_aliases = true

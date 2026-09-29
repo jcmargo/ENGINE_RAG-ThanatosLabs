@@ -1,0 +1,39 @@
+# Entornos virtuales y cachés de Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Secretos y entorno local
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials.json
+secrets.json
+
+# Modelos y datos generados. data/sample permanece versionado.
+/models/
+/data/*
+!/data/sample/
+!/data/sample/**
+/data/sample/*.pdf
+
+# Builds y dependencias del frontend
+node_modules/
+dist/
+dist-ssr/
+*.tsbuildinfo
+.vite/
+coverage/
+
+# Sistema
+.DS_Store
+Thumbs.db
