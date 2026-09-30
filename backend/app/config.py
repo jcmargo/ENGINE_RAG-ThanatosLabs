@@ -9,6 +9,14 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from app.embeddings.base import DEFAULT_EMBEDDING_MODEL
 from app.generation.ollama import DEFAULT_LLM_MODEL, DEFAULT_OLLAMA_BASE_URL
 
+# Solo para desarrollo y test locales. Producción debe fallar si se usa.
+DEFAULT_JWT_SECRET = "local-dev-only-jwt-secret-min-32b!"
+DEFAULT_JWT_ISSUER = "engine-rag"
+DEFAULT_JWT_AUDIENCE = "engine-rag-api"
+DEFAULT_ACCESS_TOKEN_MINUTES = 15
+DEFAULT_REFRESH_TOKEN_DAYS = 7
+DEFAULT_REFRESH_COOKIE_NAME = "rag_refresh"
+
 
 def _repository_root() -> Path:
     start = Path(__file__).resolve().parent
@@ -76,6 +84,12 @@ class Settings(BaseSettings):
         min_length=1,
     )
     qdrant_url: str = Field(default="http://127.0.0.1:6333", min_length=1)
+    jwt_secret: str = Field(default=DEFAULT_JWT_SECRET, min_length=1)
+    jwt_issuer: str = Field(default=DEFAULT_JWT_ISSUER, min_length=1)
+    jwt_audience: str = Field(default=DEFAULT_JWT_AUDIENCE, min_length=1)
+    access_token_minutes: int = Field(default=DEFAULT_ACCESS_TOKEN_MINUTES, ge=1)
+    refresh_token_days: int = Field(default=DEFAULT_REFRESH_TOKEN_DAYS, ge=1)
+    refresh_cookie_name: str = Field(default=DEFAULT_REFRESH_COOKIE_NAME, min_length=1)
 
     @field_validator("model_cache_dir", mode="before")
     @classmethod
@@ -112,3 +126,16 @@ def resolve_model_cache_dir(settings: Settings) -> Path | None:
     if cache_dir.is_absolute():
         return cache_dir
     return repository_root() / cache_dir
+
+
+def validate_jwt_settings_for_environment(settings: Settings) -> None:
+    """Falla en producción si el secreto JWT es el default local o es corto."""
+    if settings.environment is not Environment.PRODUCTION:
+        return
+    secret = settings.jwt_secret
+    if secret == DEFAULT_JWT_SECRET:
+        message = "RAG_JWT_SECRET no puede ser el valor por defecto en producción"
+        raise RuntimeError(message)
+    if len(secret.encode("utf-8")) < 32:
+        message = "RAG_JWT_SECRET debe tener al menos 32 bytes en producción"
+        raise RuntimeError(message)

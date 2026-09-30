@@ -33,6 +33,7 @@ def test_application_startup_does_not_create_tables() -> None:
     source = "\n".join(inspect.getsource(module) for module in (database, vector_client, main))
 
     assert "create_all" not in source
+    assert "alembic" not in source.lower()
 
 
 def test_readyz_is_ok_when_both_checks_pass() -> None:

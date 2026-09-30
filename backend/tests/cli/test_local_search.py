@@ -1,16 +1,33 @@
 """El comando local imprime fragmentos y no una respuesta generada."""
 
+import shutil
 from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
 
-from app.cli.local_search import format_hit, main
+from app.cli.local_search import build_sample_search, format_hit, main
 from app.config import Environment, LogLevel, Settings
 from app.documents.chunking import WordTokenCounter
 from app.documents.models import Chunk
 from app.retrieval.models import SearchResult
 from app.retrieval.sample_search import LocalSearchHit
+
+_SAMPLE = Path(__file__).resolve().parents[3] / "data" / "sample"
+_COMMITTED_SAMPLES = (
+    "politica-vacaciones.md",
+    "politica-gastos.md",
+    "procedimiento-soporte.md",
+)
+
+
+def _committed_sample_dir(tmp_path: Path) -> Path:
+    """Copia solo los tres markdown versionados; ignora PDF locales en data/sample."""
+    dest = tmp_path / "sample"
+    dest.mkdir()
+    for name in _COMMITTED_SAMPLES:
+        shutil.copy2(_SAMPLE / name, dest / name)
+    return dest
 
 
 def _hit() -> LocalSearchHit:
@@ -93,6 +110,7 @@ def _fail_model_load(*args: object, **kwargs: object) -> None:
 def test_main_searches_samples_without_loading_the_model(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
 ) -> None:
     settings = Settings(
         environment=Environment.TEST,
@@ -102,6 +120,7 @@ def test_main_searches_samples_without_loading_the_model(
         embedding_model="intfloat/multilingual-e5-base",
         model_cache_dir=None,
     )
+    markdown_dir = _committed_sample_dir(tmp_path)
     monkeypatch.setattr("app.cli.local_search.get_settings", lambda: settings)
     monkeypatch.setattr(
         "app.cli.local_search.SentenceTransformerEmbeddingProvider", _OfflineProvider
@@ -110,6 +129,12 @@ def test_main_searches_samples_without_loading_the_model(
     monkeypatch.setattr(
         "app.embeddings.sentence_transformer._load_sentence_transformer",
         _fail_model_load,
+    )
+    monkeypatch.setattr(
+        "app.cli.local_search.build_sample_search",
+        lambda cfg, sample_dir=None, **kwargs: build_sample_search(
+            cfg, sample_dir=markdown_dir if sample_dir is None else sample_dir, **kwargs
+        ),
     )
 
     main(["--question", "¿Cuántos días de descanso anual tengo?", "--top-k", "5"])
@@ -122,7 +147,7 @@ def test_main_searches_samples_without_loading_the_model(
         rank, score, source, page, text = line.split("\t", maxsplit=4)
         assert rank.isdigit()
         float(score)
-        assert source.endswith(".md")
+        assert source in _COMMITTED_SAMPLES
         assert page.isdigit()
         assert text
     assert "Respuesta:" not in captured.out

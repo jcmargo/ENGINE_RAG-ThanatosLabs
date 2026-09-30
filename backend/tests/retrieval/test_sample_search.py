@@ -1,5 +1,6 @@
 """Servicio local con el proveedor falso: no descarga modelos."""
 
+import shutil
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -11,6 +12,20 @@ from app.retrieval.errors import EmptySampleCorpusError
 from app.retrieval.sample_search import SampleSearchService
 
 _SAMPLE = Path(__file__).resolve().parents[3] / "data" / "sample"
+_COMMITTED_SAMPLES = (
+    "politica-vacaciones.md",
+    "politica-gastos.md",
+    "procedimiento-soporte.md",
+)
+
+
+def _committed_sample_dir(tmp_path: Path) -> Path:
+    """Copia solo los tres markdown versionados; ignora PDF locales en data/sample."""
+    dest = tmp_path / "sample"
+    dest.mkdir()
+    for name in _COMMITTED_SAMPLES:
+        shutil.copy2(_SAMPLE / name, dest / name)
+    return dest
 
 
 class SpyProvider:
@@ -37,9 +52,9 @@ class SpyProvider:
         return [0.0, 0.0, 0.0, 1.0]
 
 
-def test_sample_service_indexes_facts_without_model_prefixes() -> None:
+def test_sample_service_indexes_facts_without_model_prefixes(tmp_path: Path) -> None:
     provider = SpyProvider()
-    service = SampleSearchService(provider, _SAMPLE, WordTokenCounter())
+    service = SampleSearchService(provider, _committed_sample_dir(tmp_path), WordTokenCounter())
 
     hits = service.search("¿Cuántos días de descanso anual tengo?", top_k=2)
     again = service.search("¿Cuántos días de descanso anual tengo?", top_k=2)
@@ -53,11 +68,7 @@ def test_sample_service_indexes_facts_without_model_prefixes() -> None:
     )
     assert [hit.result.chunk.id for hit in hits] == [hit.result.chunk.id for hit in again]
     assert [hit.result.position for hit in everything] == list(range(1, len(everything) + 1))
-    assert {hit.source for hit in everything} == {
-        "politica-vacaciones.md",
-        "politica-gastos.md",
-        "procedimiento-soporte.md",
-    }
+    assert {hit.source for hit in everything} == set(_COMMITTED_SAMPLES)
     assert "18 días hábiles" in blob
     assert "40 USD" in blob
     assert "15 minutos" in blob
@@ -70,10 +81,10 @@ def test_sample_service_indexes_facts_without_model_prefixes() -> None:
     assert all(not text.startswith("query:") for text in provider.documents)
 
 
-def test_fake_provider_search_is_deterministic() -> None:
+def test_fake_provider_search_is_deterministic(tmp_path: Path) -> None:
     service = SampleSearchService(
         DeterministicFakeEmbeddingProvider(),
-        _SAMPLE,
+        _committed_sample_dir(tmp_path),
         WordTokenCounter(),
     )
 

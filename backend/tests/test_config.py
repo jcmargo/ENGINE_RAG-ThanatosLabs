@@ -7,6 +7,7 @@ from pydantic import ValidationError
 from pydantic_settings import SettingsConfigDict
 
 from app.config import (
+    DEFAULT_JWT_SECRET,
     Environment,
     LogLevel,
     Settings,
@@ -36,6 +37,12 @@ def _clear_rag_environment(monkeypatch: pytest.MonkeyPatch) -> None:
         "RAG_POSTGRES_DB",
         "RAG_DATABASE_URL",
         "RAG_QDRANT_URL",
+        "RAG_JWT_SECRET",
+        "RAG_JWT_ISSUER",
+        "RAG_JWT_AUDIENCE",
+        "RAG_ACCESS_TOKEN_MINUTES",
+        "RAG_REFRESH_TOKEN_DAYS",
+        "RAG_REFRESH_COOKIE_NAME",
     ):
         monkeypatch.delenv(name, raising=False)
 
@@ -125,6 +132,12 @@ def test_embedding_settings_default_to_local_e5() -> None:
         == "postgresql+asyncpg://engine_rag:engine_rag_local@127.0.0.1:5432/engine_rag"
     )
     assert settings.qdrant_url == "http://127.0.0.1:6333"
+    assert settings.jwt_secret == DEFAULT_JWT_SECRET
+    assert settings.jwt_issuer == "engine-rag"
+    assert settings.jwt_audience == "engine-rag-api"
+    assert settings.access_token_minutes == 15
+    assert settings.refresh_token_days == 7
+    assert settings.refresh_cookie_name == "rag_refresh"
 
 
 def test_blank_model_cache_dir_is_none() -> None:

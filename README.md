@@ -67,8 +67,25 @@ Copy-Item .env.example .env
 - `RAG_POSTGRES_USER`, `RAG_POSTGRES_PASSWORD` y `RAG_POSTGRES_DB`: credencial local de PostgreSQL. Defaults: `engine_rag`, `engine_rag_local` y `engine_rag`.
 - `RAG_DATABASE_URL`: URL async de PostgreSQL. Default: `postgresql+asyncpg://engine_rag:engine_rag_local@127.0.0.1:5432/engine_rag`.
 - `RAG_QDRANT_URL`: URL HTTP de Qdrant. Default: `http://127.0.0.1:6333`.
+- `RAG_JWT_SECRET`: secreto HMAC del access token (mínimo 32 bytes). Default local solo para desarrollo: `local-dev-only-jwt-secret-min-32b!`. En producción el arranque falla si se usa ese valor o uno más corto.
+- `RAG_JWT_ISSUER` / `RAG_JWT_AUDIENCE`: issuer y audience del JWT. Defaults: `engine-rag` y `engine-rag-api`.
+- `RAG_ACCESS_TOKEN_MINUTES`: vida del access token. Default: `15`.
+- `RAG_REFRESH_TOKEN_DAYS`: vida del refresh en cookie. Default: `7`.
+- `RAG_REFRESH_COOKIE_NAME`: nombre de la cookie HttpOnly de refresh. Default: `rag_refresh`.
 
 Sin `.env`, el proceso usa esos defaults. El archivo `.env` es opcional.
+
+### Primer provider admin
+
+Tras aplicar migraciones, crea el primer administrador global. La contraseña se lee de `RAG_BOOTSTRAP_ADMIN_PASSWORD` o de entrada oculta; nunca se imprime:
+
+```powershell
+$env:RAG_BOOTSTRAP_ADMIN_PASSWORD = "cambia-esto-en-local"
+uv run python -m app.cli.bootstrap_admin --email admin@example.com
+Remove-Item Env:RAG_BOOTSTRAP_ADMIN_PASSWORD
+```
+
+Si ya existe un provider admin, el comando termina con error y no crea otro.
 
 ## Arranque
 
@@ -147,6 +164,38 @@ docker compose -f infra/compose.local.yml down -v
 ```
 
 Con los dos servicios en marcha, `GET /readyz` responde 200. `GET /healthz` responde 200 aunque estén apagados. `uv run pytest -m integration` comprueba esas conexiones y borra solo su fila y su colección de prueba.
+
+## Migraciones
+
+Las tablas de identidad (`tenants`, `users`, `memberships`, `auth_sessions`, `api_keys`, `activation_tokens`) se aplican con Alembic. El arranque de FastAPI no crea ni modifica el esquema. Usa la misma `RAG_DATABASE_URL` tipada que la aplicación.
+
+Aplicar todas las revisiones pendientes:
+
+```powershell
+uv run alembic upgrade head
+```
+
+Revertir por completo el esquema de estas migraciones. Este comando elimina las tablas de identidad:
+
+```powershell
+uv run alembic downgrade base
+```
+
+Crear una revisión nueva a mano (preferido):
+
+```powershell
+uv run alembic revision -m "descripcion_corta"
+```
+
+`--autogenerate` solo sirve como borrador. Revisa el archivo generado, corrige nombres de restricciones y no lo apliques sin lectura humana:
+
+```powershell
+uv run alembic revision --autogenerate -m "descripcion_corta"
+```
+
+## Aislamiento por empresa
+
+Las rutas empresariales no aceptan `tenant_id` en el cuerpo ni en la query. El alcance lo construye la autenticación como `TenantContext` y el repositorio lo exige en el constructor (`TenantScopedRepository`). Un módulo nuevo que lea datos de una empresa recibe ese contexto ya creado; no lo arma desde el cliente. Un identificador de otra empresa responde 404, igual que si no existiera.
 
 ## Calidad
 
