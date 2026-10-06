@@ -34,6 +34,7 @@ def build_local_rag(settings: Settings) -> GroundedRAGService:
             timeout_seconds=settings.llm_timeout_seconds,
         ),
         min_retrieval_score=settings.min_retrieval_score,
+        min_lexical_score=settings.min_lexical_score,
     )
 
 

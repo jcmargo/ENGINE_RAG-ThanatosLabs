@@ -1,0 +1,11 @@
+# Debian bookworm no publica corrección para libsqlite3-0.
+CVE-2025-7458
+# Debian marca este CVE como will_not_fix: el código afectado no está en el zlib empaquetado.
+CVE-2023-45853
+# Caddy 2.10.2 trae smallstep v0.28.4. Este gateway no activa su CA: admin off y auto_https off.
+CVE-2025-44005
+CVE-2026-30836
+# El binario fijado de Caddy 2.10.2 incluye gRPC 1.73.0. El gateway no publica el admin ni un servicio gRPC.
+CVE-2026-33186
+# El binario fijado de Caddy 2.10.2 usa Go 1.25.0. Este stack no termina TLS; el certificado queda fuera de la spec.
+CVE-2025-68121

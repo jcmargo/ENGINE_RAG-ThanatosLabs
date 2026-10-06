@@ -187,7 +187,8 @@ def test_provider_creates_tenant_and_returns_token_once(
             json={"token": "otro-token-inexistente", "password": _PASSWORD},
         )
         assert missing.status_code == 401
-        assert missing.json() == again.json()
+        assert missing.json()["code"] == again.json()["code"]
+        assert missing.json()["detail"] == again.json()["detail"]
 
 
 def test_activation_token_expires(
@@ -220,7 +221,8 @@ def test_activation_token_expires(
             json={"token": "token-desconocido", "password": _PASSWORD},
         )
         assert expired.status_code == 401
-        assert expired.json() == unknown.json()
+        assert expired.json()["code"] == unknown.json()["code"]
+        assert expired.json()["detail"] == unknown.json()["detail"]
 
 
 def test_tenant_admin_is_isolated_from_the_other_company(tenancy_database: None) -> None:

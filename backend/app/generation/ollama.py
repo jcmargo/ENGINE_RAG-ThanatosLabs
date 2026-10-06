@@ -125,7 +125,8 @@ class OllamaLLMProvider:
             "stream": False,
             "think": False,
             "format": "json",
-            "options": {"temperature": self._temperature},
+            "keep_alive": "30m",
+            "options": {"temperature": self._temperature, "num_predict": 512},
             "messages": [
                 {"role": "system", "content": request.system_prompt},
                 {"role": "user", "content": request.user_prompt},

@@ -193,7 +193,7 @@ def test_readyz_is_ok_when_both_services_are_up() -> None:
     assert ready.status_code == 200
     assert ready.json() == {
         "status": "ok",
-        "components": {"postgresql": "ok", "qdrant": "ok"},
+        "components": {"postgresql": "ok", "qdrant": "ok", "ollama": "ok"},
     }
 
 

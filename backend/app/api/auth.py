@@ -2,13 +2,19 @@
 
 from __future__ import annotations
 
+import secrets
 from datetime import timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request, Response
 
 from app.api.deps import get_auth_service
-from app.api.http import clear_refresh_cookie, set_refresh_cookie
+from app.api.http import (
+    clear_csrf_cookie,
+    clear_refresh_cookie,
+    set_csrf_cookie,
+    set_refresh_cookie,
+)
 from app.api.schemas import AccessTokenResponse, LoginRequest
 from app.auth.service import AuthService, LoginResult
 from app.config import Settings
@@ -29,6 +35,7 @@ def get_settings_from_app(request: Request) -> Settings:
 @router.post("/login", response_model=AccessTokenResponse)
 async def login(
     body: LoginRequest,
+    request: Request,
     response: Response,
     auth_service: Annotated[AuthService, Depends(get_auth_service)],
     settings: Annotated[Settings, Depends(get_settings_from_app)],
@@ -39,6 +46,9 @@ async def login(
         password=body.password,
         tenant_slug=body.tenant_slug,
     )
+    request.state.audit_actor_id = result.principal.user_id
+    request.state.audit_tenant_id = result.principal.tenant_id
+    request.state.audit_actor_kind = result.principal.type.value
     return _access_response(response, settings=settings, result=result)
 
 
@@ -72,6 +82,7 @@ async def logout(
     refresh_token = request.cookies.get(settings.refresh_cookie_name)
     await auth_service.logout(refresh_token)
     clear_refresh_cookie(response, settings=settings)
+    clear_csrf_cookie(response, settings=settings)
     response.status_code = 204
     return response
 
@@ -87,6 +98,12 @@ def _access_response(
         response,
         settings=settings,
         refresh_token=result.refresh_token,
+        max_age=max_age,
+    )
+    set_csrf_cookie(
+        response,
+        settings=settings,
+        token=secrets.token_urlsafe(32),
         max_age=max_age,
     )
     return AccessTokenResponse(

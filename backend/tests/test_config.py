@@ -9,6 +9,7 @@ from pydantic_settings import SettingsConfigDict
 from app.config import (
     DEFAULT_JWT_SECRET,
     Environment,
+    LLMProviderName,
     LogLevel,
     Settings,
     get_settings,
@@ -25,13 +26,23 @@ def _clear_rag_environment(monkeypatch: pytest.MonkeyPatch) -> None:
         "RAG_API_HOST",
         "RAG_API_PORT",
         "RAG_EMBEDDING_MODEL",
+        "RAG_WARM_EMBEDDINGS",
         "RAG_MODEL_CACHE_DIR",
         "RAG_LLM_MODEL",
+        "RAG_LLM_PROVIDER",
         "RAG_OLLAMA_BASE_URL",
         "RAG_LLM_TEMPERATURE",
         "RAG_LLM_CONNECT_TIMEOUT_SECONDS",
         "RAG_LLM_TIMEOUT_SECONDS",
+        "RAG_EXTERNAL_LLM_BASE_URL",
+        "RAG_EXTERNAL_LLM_API_KEY",
+        "RAG_EXTERNAL_LLM_MODEL",
         "RAG_MIN_RETRIEVAL_SCORE",
+        "RAG_MAX_QUESTION_CHARS",
+        "RAG_MAX_CONTEXT_CHARS",
+        "RAG_CONVERSATION_RETENTION_DAYS",
+        "RAG_TRACE_RETENTION_DAYS",
+        "RAG_FEEDBACK_REASON_MAX_CHARS",
         "RAG_POSTGRES_USER",
         "RAG_POSTGRES_PASSWORD",
         "RAG_POSTGRES_DB",
@@ -43,6 +54,36 @@ def _clear_rag_environment(monkeypatch: pytest.MonkeyPatch) -> None:
         "RAG_ACCESS_TOKEN_MINUTES",
         "RAG_REFRESH_TOKEN_DAYS",
         "RAG_REFRESH_COOKIE_NAME",
+        "RAG_FILE_STORE_PATH",
+        "RAG_MAX_UPLOAD_BYTES",
+        "RAG_MAX_DOCUMENTS_PER_TENANT",
+        "RAG_MAX_STORAGE_BYTES_PER_TENANT",
+        "RAG_WORKER_POLL_SECONDS",
+        "RAG_WORKER_LEASE_SECONDS",
+        "RAG_WORKER_HEARTBEAT_SECONDS",
+        "RAG_WORKER_MAX_ATTEMPTS",
+        "RAG_WORKER_BACKOFF_BASE_SECONDS",
+        "RAG_WORKER_BACKOFF_CAP_SECONDS",
+        "RAG_EMBED_BATCH_SIZE",
+        "RAG_INDEX_REVISION",
+        "RAG_VECTOR_ALIAS",
+        "RAG_PSEUDONYM_SECRET",
+        "RAG_CORS_ORIGINS",
+        "RAG_METRICS_ALLOW_CIDRS",
+        "RAG_PUBLIC_HTTPS",
+        "RAG_REFRESH_COOKIE_SECURE",
+        "RAG_CSRF_COOKIE_NAME",
+        "RAG_AUDIT_RETENTION_DAYS",
+        "RAG_RATE_LOGIN_LIMIT",
+        "RAG_RATE_LOGIN_WINDOW_SECONDS",
+        "RAG_RATE_REFRESH_LIMIT",
+        "RAG_RATE_REFRESH_WINDOW_SECONDS",
+        "RAG_RATE_QUESTIONS_LIMIT",
+        "RAG_RATE_QUESTIONS_WINDOW_SECONDS",
+        "RAG_RATE_UPLOADS_LIMIT",
+        "RAG_RATE_UPLOADS_WINDOW_SECONDS",
+        "RAG_RATE_ADMIN_LIMIT",
+        "RAG_RATE_ADMIN_WINDOW_SECONDS",
     ):
         monkeypatch.delenv(name, raising=False)
 
@@ -116,6 +157,7 @@ def test_embedding_settings_default_to_local_e5() -> None:
     settings = _isolated()()
 
     assert settings.embedding_model == "intfloat/multilingual-e5-base"
+    assert settings.warm_embeddings is False
     assert settings.model_cache_dir is None
     assert resolve_model_cache_dir(settings) is None
     assert settings.llm_model == "qwen2.5:7b"
@@ -123,7 +165,14 @@ def test_embedding_settings_default_to_local_e5() -> None:
     assert settings.llm_temperature == 0.0
     assert settings.llm_connect_timeout_seconds == 5.0
     assert settings.llm_timeout_seconds == 120.0
-    assert settings.min_retrieval_score == 0.8
+    assert settings.external_llm_base_url == ""
+    assert settings.external_llm_api_key.get_secret_value() == ""
+    assert settings.external_llm_model == ""
+    assert settings.min_retrieval_score == 0.857
+    assert settings.min_lexical_score == 0.8
+    assert settings.max_question_chars == 2000
+    assert settings.max_context_chars == 12_000
+    assert settings.llm_provider is LLMProviderName.OLLAMA
     assert settings.postgres_user == "engine_rag"
     assert settings.postgres_password == "engine_rag_local"
     assert settings.postgres_db == "engine_rag"
@@ -205,6 +254,27 @@ def test_rejects_empty_qdrant_url() -> None:
         _isolated().model_validate({"qdrant_url": ""})
 
 
+def test_rejects_non_positive_question_limit() -> None:
+    with pytest.raises(ValidationError):
+        _isolated().model_validate({"max_question_chars": 0})
+
+
+def test_rejects_non_positive_context_limit() -> None:
+    with pytest.raises(ValidationError):
+        _isolated().model_validate({"max_context_chars": 0})
+
+
+def test_normalizes_the_ollama_provider_name() -> None:
+    settings = _isolated().model_validate({"llm_provider": " Ollama "})
+
+    assert settings.llm_provider is LLMProviderName.OLLAMA
+
+
+def test_rejects_an_external_llm_provider() -> None:
+    with pytest.raises(ValidationError):
+        _isolated().model_validate({"llm_provider": "openai"})
+
+
 def test_rejects_retrieval_score_outside_unit_interval() -> None:
     with pytest.raises(ValidationError):
         _isolated().model_validate({"min_retrieval_score": 1.1})
@@ -260,3 +330,23 @@ def test_missing_env_file_is_optional(tmp_path: Path) -> None:
 
     assert not missing.is_file()
     assert settings.environment is Environment.DEVELOPMENT
+
+
+def test_worker_lease_must_outlast_the_heartbeat() -> None:
+    with pytest.raises(ValidationError):
+        _isolated()(worker_lease_seconds=15, worker_heartbeat_seconds=15)
+
+
+def test_retention_defaults_match_the_product_windows() -> None:
+    settings = _isolated()()
+
+    assert settings.conversation_retention_days == 30
+    assert settings.trace_retention_days == 90
+    assert settings.feedback_reason_max_chars == 500
+
+
+def test_rejects_zero_retention_days() -> None:
+    with pytest.raises(ValidationError):
+        _isolated().model_validate({"conversation_retention_days": 0})
+    with pytest.raises(ValidationError):
+        _isolated().model_validate({"trace_retention_days": 0})

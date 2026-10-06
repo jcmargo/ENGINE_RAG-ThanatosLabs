@@ -423,6 +423,7 @@ class AuthService:
                 tenant_id=tenant.id,
                 role=None,
                 scopes=api_key.scopes,
+                api_key_id=api_key.id,
             )
 
     @staticmethod

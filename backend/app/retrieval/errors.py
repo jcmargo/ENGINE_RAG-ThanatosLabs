@@ -1,4 +1,4 @@
-"""Errores estables de la búsqueda en memoria."""
+"""Errores estables de recuperación."""
 
 
 class RetrievalError(Exception):
@@ -21,3 +21,9 @@ class EmptySampleCorpusError(RetrievalError):
     """El directorio no contiene documentos admitidos."""
 
     code = "empty_sample_corpus"
+
+
+class IncompatibleVectorIndexError(RetrievalError):
+    """La colección existe con otra dimensión, distancia o descriptor."""
+
+    code = "incompatible_vector_index"

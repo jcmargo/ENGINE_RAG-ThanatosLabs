@@ -117,6 +117,25 @@ def test_parse_rejects_unusable_text() -> None:
     assert "18 días" not in caught.value.message
 
 
+def test_label_only_answer_is_replaced_by_the_statement() -> None:
+    evidence = (
+        _hit(
+            text=(
+                "Teorema 7.4.4 Sea A una matriz de n por n. "
+                "Entonces las afirmaciones siguientes son equivalentes."
+            ),
+            section="Teorema 7.4.4",
+        ),
+    )
+    output = parse_model_output(_json_answer("7.4.4", [source_label(1)]))
+
+    answer, abstained, citations = ground_output(output, evidence)
+
+    assert abstained is False
+    assert "Sea A una matriz" in answer
+    assert citations[0].chunk_id == "chunk-real"
+
+
 def test_unknown_citation_is_dropped_and_a_real_one_is_kept() -> None:
     evidence = (_hit(),)
     output = parse_model_output(
@@ -400,6 +419,74 @@ def test_theorem_question_ignores_a_higher_scoring_different_number(
     assert "no debe enviarse" not in provider.requests[0].user_prompt
     assert "8.4.4" not in caplog.text
     assert "identifiers=1" in caplog.text
+
+
+@pytest.mark.parametrize("score", (0.84, 0.91))
+def test_non_identifier_evidence_is_narrowed_to_the_supporting_sentence(score: float) -> None:
+    text = (
+        "Los incidentes críticos son atendidos en 15 minutos.\n\n"
+        "El equipo de soporte registra el número de ticket en la herramienta interna.\n\n"
+        "Las incidencias ordinarias siguen la cola del servicio."
+    )
+    provider = FakeLLMProvider([_json_answer("Siguen la cola del servicio.", [source_label(1)])])
+    service = GroundedRAGService(
+        _ScriptedSearch((_hit(text=text, score=score, source="procedimiento-soporte.md"),)),
+        provider,
+        min_retrieval_score=0.857,
+    )
+
+    run = service.answer("¿Cómo se gestionan las incidencias ordinarias?")
+
+    assert run.llm_called is True
+    prompt = provider.requests[0].user_prompt
+    assert "cola del servicio" in prompt
+    assert "15 minutos" not in prompt
+    assert run.answer.citations
+    assert "15" not in run.answer.citations[0].excerpt
+    assert "cola del servicio" in run.answer.citations[0].excerpt
+
+
+@pytest.mark.parametrize("score", (0.84, 0.91))
+def test_quantity_without_a_digit_abstains_without_calling_the_llm(score: float) -> None:
+    text = (
+        "Los incidentes críticos son atendidos en 15 minutos.\n\n"
+        "Las incidencias ordinarias siguen la cola del servicio."
+    )
+    provider = FakeLLMProvider([_json_answer("no debe usarse", [source_label(1)])])
+    service = GroundedRAGService(
+        _ScriptedSearch((_hit(text=text, score=score, source="procedimiento-soporte.md"),)),
+        provider,
+        min_retrieval_score=0.857,
+    )
+
+    run = service.answer("¿En cuántos minutos se atienden las incidencias ordinarias?")
+
+    assert provider.requests == []
+    assert run.llm_called is False
+    assert run.answer.abstained is True
+    assert run.answer.answer == PUBLIC_ABSTENTION
+    assert run.answer.citations == ()
+
+
+def test_measure_only_sentence_abstains_without_calling_the_llm() -> None:
+    text = (
+        "El máximo reembolsable de taxi es de 40 USD por trayecto.\n\n"
+        "Los comprobantes se conservan durante el ejercicio fiscal."
+    )
+    provider = FakeLLMProvider([_json_answer("no debe usarse", [source_label(1)])])
+    service = GroundedRAGService(
+        _ScriptedSearch((_hit(text=text, score=0.91, source="politica-gastos.md"),)),
+        provider,
+        min_retrieval_score=0.857,
+    )
+
+    run = service.answer("¿Cuál es el máximo reembolsable de un avión?")
+
+    assert provider.requests == []
+    assert run.llm_called is False
+    assert run.answer.abstained is True
+    assert run.answer.answer == PUBLIC_ABSTENTION
+    assert run.answer.citations == ()
 
 
 def test_missing_theorem_number_abstains_without_calling_the_llm() -> None:

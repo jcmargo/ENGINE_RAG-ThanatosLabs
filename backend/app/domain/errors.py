@@ -45,3 +45,15 @@ class AuthorizationError(DomainError):
 
     def __init__(self, message: str = "Permiso denegado") -> None:
         super().__init__(message)
+
+
+class PayloadTooLargeError(DomainError):
+    """El archivo supera el límite mientras se recibe. El transporte responde 413."""
+
+    code = "file_too_large"
+
+
+class EvaluationRejected(DomainError):
+    """El conjunto o la corrida no se aceptan. El mensaje no cita el caso."""
+
+    code = "evaluation_rejected"

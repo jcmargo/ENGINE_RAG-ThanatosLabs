@@ -1,0 +1,186 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - name: Dependencias
+        run: uv sync --frozen --all-extras
+      - name: Ruff
+        run: |
+          uv run ruff check .
+          uv run ruff format --check .
+      - name: mypy
+        run: uv run --project backend mypy backend/app
+      - name: Pytest
+        run: uv run --project backend pytest
+      - name: pip-audit
+        run: uv run --project backend --group dev pip-audit
+      - name: Quality gate determinista
+        run: |
+          tenant=aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa
+          common=(
+            uv run --project backend python -m app.cli.eval run
+            --cases eval/fixtures/cases.jsonl
+            --corpus eval/fixtures/corpus
+            --version lumin-v1
+            --tenant-id "$tenant"
+            --profile deterministic
+          )
+          "${common[@]}" --output "$RUNNER_TEMP/baseline.json" --markdown "$RUNNER_TEMP/baseline.md"
+          "${common[@]}" --output "$RUNNER_TEMP/candidate.json" --markdown "$RUNNER_TEMP/candidate.md"
+          uv run --project backend python -m app.cli.eval gate \
+            --baseline "$RUNNER_TEMP/baseline.json" \
+            --candidate "$RUNNER_TEMP/candidate.json" \
+            --output "$RUNNER_TEMP/gate.json" \
+            --markdown "$RUNNER_TEMP/gate.md"
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Dependencias y comprobaciones
+        run: |
+          npm --prefix frontend ci
+          npm --prefix frontend run lint
+          npm --prefix frontend run typecheck
+          npm --prefix frontend test -- --run
+          npm --prefix frontend run build
+          npm --prefix frontend audit --audit-level=critical
+      - name: El bundle no lleva secretos
+        run: |
+          python - <<'PY'
+          import re
+          from pathlib import Path
+          needles = (
+              b"engine_rag_local",
+              b"local-dev-only-jwt-secret-min-32b!",
+              b"local-dev-only-pseudonym-secret-32b",
+          )
+          key = re.compile(rb"sk-[A-Za-z0-9_\-]{8,}")
+          root = Path("frontend/dist")
+          bad = []
+          for path in root.rglob("*"):
+              if not path.is_file():
+                  continue
+              data = path.read_bytes()
+              for needle in needles:
+                  if needle in data:
+                      bad.append(f"{path}: {needle!r}")
+              if key.search(data):
+                  bad.append(f"{path}: api key")
+          if bad:
+              raise SystemExit("\n".join(bad))
+          PY
+
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - name: Dependencias
+        run: uv sync --frozen --all-extras
+      - name: Postgres y Qdrant efímeros
+        run: docker compose -f infra/compose.local.yml up -d --wait
+      - name: Integración
+        run: uv run --project backend pytest -m integration
+      - name: Apagar los servicios
+        if: always()
+        run: docker compose -f infra/compose.local.yml down -v
+
+  images:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: |
+          docker build -f backend/Dockerfile -t engine-rag-backend:ci .
+          docker build -f frontend/Dockerfile -t engine-rag-gateway:ci .
+      - name: Trivy
+        run: |
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$PWD/.trivyignore:/.trivyignore:ro" \
+            aquasec/trivy:0.58.1@sha256:ab70a02200597efa04748f210f793936eb647cbcdb0ea69cc30b226d6f5a22c7 \
+            image --severity CRITICAL --exit-code 1 --scanners vuln --timeout 20m \
+            --ignorefile /.trivyignore engine-rag-backend:ci
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$PWD/.trivyignore:/.trivyignore:ro" \
+            aquasec/trivy:0.58.1@sha256:ab70a02200597efa04748f210f793936eb647cbcdb0ea69cc30b226d6f5a22c7 \
+            image --severity CRITICAL --exit-code 1 --scanners vuln --timeout 20m \
+            --ignorefile /.trivyignore engine-rag-gateway:ci
+      - name: Las imágenes no hornean secretos de despliegue
+        run: |
+          python - <<'PY'
+          import json
+          import subprocess
+
+          needles = (
+              "engine_rag_local",
+              "local-dev-only-jwt-secret-min-32b!",
+              "local-dev-only-pseudonym-secret-32b",
+          )
+          for image in ("engine-rag-backend:ci", "engine-rag-gateway:ci"):
+              inspect = json.loads(subprocess.check_output(["docker", "image", "inspect", image]))
+              env = "\n".join(inspect[0]["Config"].get("Env") or [])
+              for needle in needles:
+                  if needle in env:
+                      raise SystemExit(f"{image} env contiene {needle}")
+          script = r"""
+          from pathlib import Path
+          needles = (
+              b"engine_rag_local",
+              b"local-dev-only-jwt-secret-min-32b!",
+              b"local-dev-only-pseudonym-secret-32b",
+          )
+          if Path("/app/.env").is_file():
+              raise SystemExit("/app/.env no debe existir en la imagen")
+          roots = (
+              Path("/app/backend"),
+              Path("/app/eval"),
+              Path("/app/.venv/lib/python3.12/site-packages/app"),
+          )
+          for root in roots:
+              if not root.exists():
+                  continue
+              for path in root.rglob("*"):
+                  if not path.is_file() or path.name == "config.py" or path.stem.startswith("config."):
+                      continue
+                  if path.stat().st_size > 2_000_000:
+                      continue
+                  data = path.read_bytes()
+                  for needle in needles:
+                      if needle in data:
+                          raise SystemExit(f"{path} contiene {needle!r}")
+          """
+          subprocess.check_call(
+              ["docker", "run", "--rm", "--entrypoint", "python", "engine-rag-backend:ci", "-c", script]
+          )
+          gateway = subprocess.run(
+              [
+                  "docker", "run", "--rm", "--entrypoint", "sh", "engine-rag-gateway:ci", "-c",
+                  "grep -R -n -E 'engine_rag_local|local-dev-only-jwt-secret|local-dev-only-pseudonym-secret' /srv",
+              ],
+              check=False,
+          )
+          if gateway.returncode == 0:
+              raise SystemExit("el frontend compilado contiene un secreto de desarrollo")
+          PY

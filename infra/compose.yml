@@ -1,0 +1,305 @@
+# Stack del producto. Solo el gateway publica puerto.
+# Postgres, Qdrant y la API quedan en la red privada.
+# Ollama sigue en el host: API y worker salen por la red egress.
+
+name: engine-rag-product
+
+x-backend-env: &backend-env
+  RAG_API_HOST: "0.0.0.0"
+  RAG_API_PORT: "8000"
+  RAG_DATABASE_URL: postgresql+asyncpg://${RAG_POSTGRES_USER:-engine_rag}:${RAG_POSTGRES_PASSWORD:?RAG_POSTGRES_PASSWORD}@postgres:5432/${RAG_POSTGRES_DB:-engine_rag}
+  RAG_QDRANT_URL: http://qdrant:6333
+  RAG_OLLAMA_BASE_URL: ${RAG_OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+  RAG_FILE_STORE_PATH: /data/uploads
+  RAG_MODEL_CACHE_DIR: /cache/embeddings
+  RESTIC_REPOSITORY: /backups
+  RESTIC_PASSWORD_FILE: /run/secrets/restic-password
+  HOME: /tmp
+  HF_HOME: /cache/embeddings
+  SENTENCE_TRANSFORMERS_HOME: /cache/embeddings
+
+services:
+  postgres:
+    image: postgres:17.11@sha256:d74eeac9a635390a49bc21bd49fccd973de707e2a53a76ac49b552b8712ec46f
+    environment:
+      POSTGRES_USER: ${RAG_POSTGRES_USER:-engine_rag}
+      POSTGRES_PASSWORD: ${RAG_POSTGRES_PASSWORD:?RAG_POSTGRES_PASSWORD}
+      POSTGRES_DB: ${RAG_POSTGRES_DB:-engine_rag}
+    volumes:
+      - engine_rag_product_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+    stop_grace_period: 30s
+    networks:
+      - private
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+
+  qdrant:
+    image: qdrant/qdrant:v1.19.1@sha256:12364fe851b9f17356fc88189fc06d1b521262e04659ec7345975b00c9246a10
+    volumes:
+      - engine_rag_product_qdrant:/qdrant/storage
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          'bash -c "exec 3<>/dev/tcp/127.0.0.1/6333 && printf \"GET /readyz HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n\" >&3 && grep -q \"200 OK\" <&3"',
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    restart: unless-stopped
+    stop_grace_period: 30s
+    networks:
+      - private
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+
+  init-data:
+    image: engine-rag-backend:${ENGINE_RAG_VERSION:-0.1.0}
+    user: "0:0"
+    read_only: true
+    tmpfs:
+      - /tmp:mode=1777
+    entrypoint: ["python", "/app/init_data.py"]
+    volumes:
+      - engine_rag_product_originals:/data/uploads
+      - engine_rag_product_embeddings:/cache/embeddings
+      - engine_rag_product_backups:/backups
+    restart: "no"
+    networks:
+      - private
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 128M
+
+  migrate:
+    image: engine-rag-backend:${ENGINE_RAG_VERSION:-0.1.0}
+    user: "10001:10001"
+    read_only: true
+    tmpfs:
+      - /tmp:mode=1777
+    env_file:
+      - ../.env.product
+    environment:
+      <<: *backend-env
+    command: ["python", "-m", "alembic", "upgrade", "head"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    networks:
+      - private
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+
+  api:
+    image: engine-rag-backend:${ENGINE_RAG_VERSION:-0.1.0}
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+      args:
+        ENGINE_RAG_VERSION: ${ENGINE_RAG_VERSION:-0.1.0}
+        ENGINE_RAG_REVISION: ${ENGINE_RAG_REVISION:-dev}
+    user: "10001:10001"
+    read_only: true
+    tmpfs:
+      - /tmp:mode=1777
+    env_file:
+      - ../.env.product
+    environment:
+      <<: *backend-env
+    volumes:
+      - engine_rag_product_originals:/data/uploads
+      - engine_rag_product_embeddings:/cache/embeddings
+      - engine_rag_product_backups:/backups
+      - ../.restic-password:/run/secrets/restic-password:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      init-data:
+        condition: service_completed_successfully
+      migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3)",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 600s
+    restart: unless-stopped
+    stop_grace_period: 30s
+    networks:
+      - private
+      - egress
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2G
+
+  worker:
+    image: engine-rag-backend:${ENGINE_RAG_VERSION:-0.1.0}
+    user: "10001:10001"
+    read_only: true
+    tmpfs:
+      - /tmp:mode=1777
+    env_file:
+      - ../.env.product
+    environment:
+      <<: *backend-env
+      RAG_WORKER_HEARTBEAT_PATH: /tmp/engine-rag-worker-heartbeat
+    command: ["python", "-m", "app.worker"]
+    volumes:
+      - engine_rag_product_originals:/data/uploads
+      - engine_rag_product_embeddings:/cache/embeddings
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      init-data:
+        condition: service_completed_successfully
+      migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import os,time,pathlib; p=pathlib.Path('/tmp/engine-rag-worker-heartbeat'); raise SystemExit(0 if p.is_file() and time.time()-p.stat().st_mtime<45 else 1)",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 600s
+    restart: unless-stopped
+    stop_grace_period: 60s
+    networks:
+      - private
+      - egress
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 4G
+
+  backup:
+    image: engine-rag-backend:${ENGINE_RAG_VERSION:-0.1.0}
+    profiles: ["backup"]
+    user: "10001:10001"
+    read_only: true
+    tmpfs:
+      - /tmp:mode=1777
+    env_file:
+      - ../.env.product
+    environment:
+      <<: *backend-env
+    command: ["python", "-m", "app.cli.backup"]
+    volumes:
+      - engine_rag_product_originals:/data/uploads
+      - engine_rag_product_backups:/backups
+      - ../.restic-password:/run/secrets/restic-password:ro
+    depends_on:
+      init-data:
+        condition: service_completed_successfully
+      migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    restart: "no"
+    networks:
+      - private
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+
+  gateway:
+    image: engine-rag-gateway:${ENGINE_RAG_VERSION:-0.1.0}
+    build:
+      context: ..
+      dockerfile: frontend/Dockerfile
+      args:
+        ENGINE_RAG_VERSION: ${ENGINE_RAG_VERSION:-0.1.0}
+        ENGINE_RAG_REVISION: ${ENGINE_RAG_REVISION:-dev}
+    user: "10001:10001"
+    read_only: true
+    tmpfs:
+      - /tmp:mode=1777
+      - /data:mode=1777
+      - /config:mode=1777
+    environment:
+      RAG_PUBLIC_HTTPS: ${RAG_PUBLIC_HTTPS:-false}
+    ports:
+      - "127.0.0.1:${RAG_GATEWAY_PORT:-8080}:8080"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+    restart: unless-stopped
+    stop_grace_period: 15s
+    networks:
+      - public
+      - private
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+
+networks:
+  public:
+  private:
+    internal: true
+  egress:
+
+volumes:
+  engine_rag_product_postgres:
+    name: engine_rag_product_postgres
+  engine_rag_product_qdrant:
+    name: engine_rag_product_qdrant
+  engine_rag_product_originals:
+    name: engine_rag_product_originals
+  engine_rag_product_embeddings:
+    name: engine_rag_product_embeddings
+  engine_rag_product_backups:
+    name: engine_rag_product_backups

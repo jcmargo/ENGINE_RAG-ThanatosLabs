@@ -4,6 +4,9 @@ from app.domain.entities import (
     ActivationToken,
     ApiKey,
     AuthSession,
+    Document,
+    DocumentVersion,
+    IngestionJob,
     Membership,
     Tenant,
     TenantMember,
@@ -14,6 +17,9 @@ from app.domain.enums import (
     ApiKeyScope,
     ApiKeyStatus,
     AuthSessionStatus,
+    DocumentVersionStatus,
+    IngestionJobStatus,
+    IngestionJobType,
     MembershipStatus,
     SystemRole,
     TenantRole,
@@ -25,6 +31,9 @@ from app.persistence.models import (
     ActivationTokenModel,
     ApiKeyModel,
     AuthSessionModel,
+    DocumentModel,
+    DocumentVersionModel,
+    IngestionJobModel,
     MembershipModel,
     TenantModel,
     UserModel,
@@ -206,6 +215,126 @@ def activation_token_to_model(entity: ActivationToken) -> ActivationTokenModel:
         created_at=entity.created_at,
         updated_at=entity.updated_at,
         consumed_at=entity.consumed_at,
+    )
+
+
+def document_to_domain(model: DocumentModel) -> Document:
+    """Mapea una fila de `documents` a entidad de dominio."""
+    return Document(
+        id=model.id,
+        tenant_id=model.tenant_id,
+        display_name=model.display_name,
+        status=DocumentVersionStatus(model.status),
+        current_version_id=model.current_version_id,
+        created_at=model.created_at,
+        updated_at=model.updated_at,
+    )
+
+
+def document_to_model(entity: Document) -> DocumentModel:
+    """Mapea una entidad `Document` a fila ORM."""
+    return DocumentModel(
+        id=entity.id,
+        tenant_id=entity.tenant_id,
+        display_name=entity.display_name,
+        status=entity.status.value,
+        current_version_id=entity.current_version_id,
+        created_at=entity.created_at,
+        updated_at=entity.updated_at,
+    )
+
+
+def document_version_to_domain(model: DocumentVersionModel) -> DocumentVersion:
+    """Mapea una fila de `document_versions` a entidad de dominio."""
+    return DocumentVersion(
+        id=model.id,
+        tenant_id=model.tenant_id,
+        document_id=model.document_id,
+        version_number=model.version_number,
+        status=DocumentVersionStatus(model.status),
+        mime_type=model.mime_type,
+        byte_size=int(model.byte_size),
+        content_sha256=model.content_sha256,
+        storage_key=model.storage_key,
+        pipeline_version=model.pipeline_version,
+        chunk_count=model.chunk_count,
+        public_error_code=model.public_error_code,
+        progress=model.progress,
+        indexed_at=model.indexed_at,
+        created_at=model.created_at,
+        updated_at=model.updated_at,
+    )
+
+
+def document_version_to_model(entity: DocumentVersion) -> DocumentVersionModel:
+    """Mapea una entidad `DocumentVersion` a fila ORM."""
+    return DocumentVersionModel(
+        id=entity.id,
+        tenant_id=entity.tenant_id,
+        document_id=entity.document_id,
+        version_number=entity.version_number,
+        status=entity.status.value,
+        mime_type=entity.mime_type,
+        byte_size=entity.byte_size,
+        content_sha256=entity.content_sha256,
+        storage_key=entity.storage_key,
+        pipeline_version=entity.pipeline_version,
+        chunk_count=entity.chunk_count,
+        public_error_code=entity.public_error_code,
+        progress=entity.progress,
+        indexed_at=entity.indexed_at,
+        created_at=entity.created_at,
+        updated_at=entity.updated_at,
+    )
+
+
+def ingestion_job_to_domain(model: IngestionJobModel) -> IngestionJob:
+    """Mapea una fila de `ingestion_jobs` a entidad de dominio."""
+    return IngestionJob(
+        id=model.id,
+        tenant_id=model.tenant_id,
+        document_id=model.document_id,
+        document_version_id=model.document_version_id,
+        job_type=IngestionJobType(model.job_type),
+        status=IngestionJobStatus(model.status),
+        created_at=model.created_at,
+        updated_at=model.updated_at,
+        attempts=model.attempts,
+        max_attempts=model.max_attempts,
+        available_at=model.available_at,
+        lease_owner=model.lease_owner,
+        lease_expires_at=model.lease_expires_at,
+        progress=model.progress,
+        error_code=model.error_code,
+        replacement_version_id=model.replacement_version_id,
+        started_at=model.started_at,
+        finished_at=model.finished_at,
+        origin_request_id=model.origin_request_id,
+    )
+
+
+def ingestion_job_to_model(entity: IngestionJob) -> IngestionJobModel:
+    """Mapea una entidad `IngestionJob` a fila ORM."""
+    return IngestionJobModel(
+        id=entity.id,
+        tenant_id=entity.tenant_id,
+        document_id=entity.document_id,
+        document_version_id=entity.document_version_id,
+        job_type=entity.job_type.value,
+        status=entity.status.value,
+        created_at=entity.created_at,
+        updated_at=entity.updated_at,
+        attempts=entity.attempts,
+        max_attempts=entity.max_attempts,
+        available_at=entity.created_at if entity.available_at is None else entity.available_at,
+        lease_owner=entity.lease_owner,
+        lease_expires_at=entity.lease_expires_at,
+        progress=entity.progress,
+        error_code=entity.error_code,
+        replacement_version_id=entity.replacement_version_id,
+        started_at=entity.started_at,
+        finished_at=entity.finished_at,
+        origin_request_id=entity.origin_request_id,
     )
 
 

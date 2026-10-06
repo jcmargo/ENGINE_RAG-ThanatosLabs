@@ -51,7 +51,8 @@ def test_posts_structured_chat_and_returns_content(
     assert body["stream"] is False
     assert body["format"] == "json"
     assert body["think"] is False
-    assert body["options"] == {"temperature": 0.0}
+    assert body["keep_alive"] == "30m"
+    assert body["options"] == {"temperature": 0.0, "num_predict": 512}
     messages = body["messages"]
     assert isinstance(messages, list)
     assert messages[1] == {"role": "user", "content": "PREGUNTA-SECRETA-03"}

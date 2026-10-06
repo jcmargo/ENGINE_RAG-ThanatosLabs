@@ -1,5 +1,6 @@
 """Punto de entrada local: `uv run python -m app`."""
 
+import os
 import subprocess
 import sys
 
@@ -20,10 +21,21 @@ def server_command(settings: Settings) -> list[str]:
     ]
 
 
+def child_environment() -> dict[str, str]:
+    """Entorno del proceso uvicorn. Precarga embeddings salvo opt-out explícito."""
+    env = dict(os.environ)
+    env.setdefault("RAG_WARM_EMBEDDINGS", "true")
+    return env
+
+
 def main() -> None:
     """Arranca la API con el host y el puerto configurados."""
     try:
-        completed = subprocess.run(server_command(get_settings()), check=False)
+        completed = subprocess.run(
+            server_command(get_settings()),
+            check=False,
+            env=child_environment(),
+        )
     except KeyboardInterrupt as error:
         raise SystemExit(130) from error
     raise SystemExit(completed.returncode)

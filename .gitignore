@@ -16,8 +16,13 @@ htmlcov/
 !.env.example
 *.pem
 *.key
+.restic-password
 credentials.json
 secrets.json
+
+# Datasets de clientes y reportes de evaluación. El fixture ficticio sí se versiona.
+/eval/private/
+/eval/reports/
 
 # Modelos y datos generados. data/sample permanece versionado.
 /models/

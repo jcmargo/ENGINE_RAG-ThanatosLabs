@@ -115,6 +115,13 @@ def _auth_header(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
+def _csrf_header(client: TestClient) -> dict[str, str]:
+    token = client.cookies.get("rag_csrf")
+    if token is None:
+        return {}
+    return {"X-CSRF-Token": token}
+
+
 async def _seed_identity(
     factory: async_sessionmaker[AsyncSession],
 ) -> _SeededIdentity:
@@ -243,7 +250,9 @@ def test_auth_login_refresh_logout_and_rbac_matrix(auth_database: None) -> None:
         )
         assert unknown.status_code == 401
         assert wrong.status_code == 401
-        assert unknown.json() == wrong.json()
+        assert unknown.json()["code"] == wrong.json()["code"]
+        assert unknown.json()["detail"] == wrong.json()["detail"]
+        assert unknown.json()["request_id"] != wrong.json()["request_id"]
         assert unknown.headers.get("www-authenticate") == "Bearer"
         assert "nobody@example.com" not in unknown.text
 
@@ -346,14 +355,14 @@ def test_auth_login_refresh_logout_and_rbac_matrix(auth_database: None) -> None:
         assert body_cross.status_code == 403
 
         client.cookies.set("rag_refresh", admin_refresh, path="/v1/auth")
-        refreshed = client.post("/v1/auth/refresh")
+        refreshed = client.post("/v1/auth/refresh", headers=_csrf_header(client))
         assert refreshed.status_code == 200
         new_refresh = refreshed.cookies["rag_refresh"]
         assert new_refresh != admin_refresh
         client.cookies.set("rag_refresh", admin_refresh, path="/v1/auth")
-        assert client.post("/v1/auth/refresh").status_code == 401
+        assert client.post("/v1/auth/refresh", headers=_csrf_header(client)).status_code == 401
         client.cookies.set("rag_refresh", new_refresh, path="/v1/auth")
-        assert client.post("/v1/auth/refresh").status_code == 401
+        assert client.post("/v1/auth/refresh", headers=_csrf_header(client)).status_code == 401
 
         admin_login2 = client.post(
             "/v1/auth/login",
@@ -383,7 +392,8 @@ def test_auth_login_refresh_logout_and_rbac_matrix(auth_database: None) -> None:
             admin_login2.cookies["rag_refresh"],
             path="/v1/auth",
         )
-        assert client.post("/v1/auth/logout").status_code == 204
+        assert client.post("/v1/auth/logout", headers=_csrf_header(client)).status_code == 204
+        client.cookies.clear()
         assert client.post("/v1/auth/refresh").status_code == 401
 
         fresh = client.post(
@@ -509,7 +519,7 @@ def test_auth_secrets_absent_from_logs(
                 json={"scopes": ["query"]},
             )
             secret = created.json()["secret"]
-            client.post("/v1/auth/logout")
+            client.post("/v1/auth/logout", headers=_csrf_header(client))
 
     joined = "\n".join(record.message for record in caplog.records)
     assert _PASSWORD not in joined

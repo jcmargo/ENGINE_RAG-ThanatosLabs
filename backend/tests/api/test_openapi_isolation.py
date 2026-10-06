@@ -3,7 +3,16 @@
 from app.config import Environment, LogLevel, Settings
 from app.main import create_app
 
-_ENTERPRISE_PREFIXES = ("/v1/users", "/v1/auth/activate")
+_ENTERPRISE_PREFIXES = (
+    "/v1/users",
+    "/v1/auth/activate",
+    "/v1/documents",
+    "/v1/questions",
+    "/v1/conversations",
+    "/v1/messages",
+    "/v1/usage",
+    "/v1/provider/usage",
+)
 
 
 def test_enterprise_openapi_omits_tenant_id() -> None:

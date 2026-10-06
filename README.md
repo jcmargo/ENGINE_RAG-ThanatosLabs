@@ -1,6 +1,6 @@
 # Engine RAG
 
-Base local de **Engine RAG**, el producto RAG de **ThanatosLabs**. Este repositorio arranca un backend FastAPI y un frontend React. La generación local usa Ollama en el host. PostgreSQL y Qdrant locales se levantan con Docker Compose. Los contenedores de producción llegan en una spec posterior.
+Base local de **Engine RAG**, el producto RAG de **ThanatosLabs**. Este repositorio arranca un backend FastAPI y un frontend React. La generación usa Ollama en el host. PostgreSQL y Qdrant locales se levantan con Docker Compose. El stack de producto (API, worker, migraciones, frontend y gateway) se levanta con un solo comando.
 
 Los comandos de esta guía están escritos para PowerShell.
 
@@ -50,7 +50,7 @@ Copia el ejemplo si quieres cambiar el entorno local:
 Copy-Item .env.example .env
 ```
 
-`.env` está en `.gitignore`. Estas variables tienen valores seguros de desarrollo:
+`.env` está en `.gitignore`. Los defaults de JWT y Postgres son solo para desarrollo local; no los uses fuera de loopback:
 
 - `RAG_ENVIRONMENT`: `development`, `test` o `production`. Default: `development`.
 - `RAG_LOG_LEVEL`: `DEBUG`, `INFO`, `WARNING`, `ERROR` o `CRITICAL`. Default: `INFO`.
@@ -58,16 +58,18 @@ Copy-Item .env.example .env
 - `RAG_API_PORT`: puerto TCP de la API. Default: `8000`.
 - `RAG_EMBEDDING_MODEL`: modelo local de embeddings. Default: `intfloat/multilingual-e5-base`.
 - `RAG_MODEL_CACHE_DIR`: carpeta de la caché del modelo. Si se omite, se usa la caché de Hugging Face del usuario. Una ruta relativa se resuelve desde la raíz del repositorio. `/models/` está en `.gitignore`.
-- `RAG_LLM_MODEL`: modelo de Ollama. Default: `qwen2.5:7b`. En un equipo limitado, `qwen3.5:2b` cierra la generación local.
+- `RAG_LLM_MODEL`: modelo de Ollama. Default: `qwen2.5:7b`. En un equipo limitado, `qwen3.5:2b` cierra la generación local. El chat puede elegir otro modelo instalado.
+- `RAG_EXTERNAL_LLM_BASE_URL`, `RAG_EXTERNAL_LLM_API_KEY` y `RAG_EXTERNAL_LLM_MODEL`: API de chat compatible con OpenAI. Si falta cualquiera, el selector no la ofrece. La clave se queda en el servidor.
 - `RAG_OLLAMA_BASE_URL`: URL de Ollama. Default: `http://127.0.0.1:11434`.
 - `RAG_LLM_TEMPERATURE`: temperatura de generación. Default: `0`.
 - `RAG_LLM_CONNECT_TIMEOUT_SECONDS`: timeout de conexión. Default: `5`.
 - `RAG_LLM_TIMEOUT_SECONDS`: timeout total de la respuesta. Default: `120`.
-- `RAG_MIN_RETRIEVAL_SCORE`: umbral de evidencia. Default: `0.8`, calibrado con `data/sample`.
-- `RAG_POSTGRES_USER`, `RAG_POSTGRES_PASSWORD` y `RAG_POSTGRES_DB`: credencial local de PostgreSQL. Defaults: `engine_rag`, `engine_rag_local` y `engine_rag`.
-- `RAG_DATABASE_URL`: URL async de PostgreSQL. Default: `postgresql+asyncpg://engine_rag:engine_rag_local@127.0.0.1:5432/engine_rag`.
+- `RAG_MIN_RETRIEVAL_SCORE`: umbral de evidencia por coseno. Default: `0.857`, el corte más alto que aún acepta los tres hechos de `data/sample`.
+- `RAG_MIN_LEXICAL_SCORE`: piso bajo. Default: `0.80`. Entre este valor y el umbral de coseno solo entra un fragmento que cubre al menos la mitad de las palabras de la pregunta.
+- `RAG_POSTGRES_USER`, `RAG_POSTGRES_PASSWORD` y `RAG_POSTGRES_DB`: credencial local de PostgreSQL. Defaults solo locales: `engine_rag`, `engine_rag_local` y `engine_rag`.
+- `RAG_DATABASE_URL`: URL async de PostgreSQL. Default: `postgresql+asyncpg://engine_rag:engine_rag_local@127.0.0.1:5432/engine_rag`. No se deriva de `RAG_POSTGRES_PASSWORD`: si cambias uno, actualiza el otro para que la API y Compose usen el mismo password.
 - `RAG_QDRANT_URL`: URL HTTP de Qdrant. Default: `http://127.0.0.1:6333`.
-- `RAG_JWT_SECRET`: secreto HMAC del access token (mínimo 32 bytes). Default local solo para desarrollo: `local-dev-only-jwt-secret-min-32b!`. En producción el arranque falla si se usa ese valor o uno más corto.
+- `RAG_JWT_SECRET`: secreto HMAC del access token (mínimo 32 bytes). Default solo local: `local-dev-only-jwt-secret-min-32b!`. En producción el arranque falla si se usa ese valor o uno más corto.
 - `RAG_JWT_ISSUER` / `RAG_JWT_AUDIENCE`: issuer y audience del JWT. Defaults: `engine-rag` y `engine-rag-api`.
 - `RAG_ACCESS_TOKEN_MINUTES`: vida del access token. Default: `15`.
 - `RAG_REFRESH_TOKEN_DAYS`: vida del refresh en cookie. Default: `7`.
@@ -135,6 +137,37 @@ uv run python -m app.cli.local_rag --question "¿Cuántos días de descanso anua
 ```
 
 La salida incluye respuesta, abstención, citas, puntuaciones y latencias. Si Ollama está apagado, el comando termina con un mensaje para iniciarlo y no imprime una traza.
+
+## Stack de producto
+
+Un solo flujo construye las imágenes y deja el stack healthy. El script crea `.env.product` (ignorado por git) con secretos aleatorios si todavía no existe. La plantilla sin secretos reales es `infra/env.product.example`.
+
+```powershell
+.\scripts\stack.ps1 up
+```
+
+El gateway queda en `http://127.0.0.1:8080`. Solo ese puerto se publica. Si `8080` ya está ocupado, cambia `RAG_GATEWAY_PORT` en `.env.product` y pon el mismo origen en `RAG_CORS_ORIGINS`. PostgreSQL, Qdrant y la API viven en la red interna. Ollama sigue en el host. En Windows, Docker Desktop resuelve `host.docker.internal`; el Compose lo apunta a `host-gateway` para que el mismo archivo sirva en Linux. La URL por defecto es `http://host.docker.internal:11434`.
+
+La cookie de refresh es `Secure`. Por HTTP el navegador no la guarda; el access token del JSON sí permite preguntar hasta que caduque. El TLS que haría persistir el refresh queda fuera de este stack.
+
+Otros comandos del mismo script:
+
+```powershell
+.\scripts\stack.ps1 build
+.\scripts\stack.ps1 logs
+.\scripts\stack.ps1 test
+.\scripts\stack.ps1 eval
+.\scripts\stack.ps1 update
+.\scripts\stack.ps1 backup
+.\scripts\stack.ps1 drill
+.\scripts\stack.ps1 down
+```
+
+`backup` lanza una captura cifrada con restic en la red privada. El script crea `.restic-password` solo si falta. El horario diario queda en el runbook `docs/runbooks/backup-restore.md`. `drill` repite el simulacro en el proyecto Compose `engine-rag-drill` y no toca los volúmenes del producto.
+
+`down` no borra volúmenes. La base, los vectores, los originales y la caché de embeddings siguen. `update` reconstruye las imágenes y recrea contenedores sobre esos volúmenes. La caché de Hugging Face se puede volver a descargar; no es una copia de seguridad.
+
+Los datos de desarrollo (`infra/compose.local.yml`, puertos `5432` y `6333`) son otro proyecto de Compose y no comparten volúmenes con este stack.
 
 ## Datos locales
 

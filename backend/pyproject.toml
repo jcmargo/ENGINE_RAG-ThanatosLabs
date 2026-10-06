@@ -7,13 +7,16 @@ dependencies = [
     "alembic>=1.20.0",
     "argon2-cffi>=25.1.0",
     "asyncpg>=0.31.0",
+    "cryptography>=50.0.2",
     "fastapi>=0.115.6",
     "greenlet>=3.5.6",
     "httpx>=0.28.1",
+    "prometheus-client>=0.26.0",
     "pydantic-settings>=2.7.1",
     "pyjwt>=2.15.1",
     "pymupdf>=1.25.5",
     "python-docx>=1.1.2",
+    "python-multipart>=0.0.32",
     "qdrant-client>=1.19.1",
     "sentence-transformers>=6.1.0",
     "sqlalchemy>=2.1.1",
@@ -60,3 +63,8 @@ packages = ["app"]
 init_forbid_extra = true
 init_typed = true
 warn_required_dynamic_aliases = true
+
+[dependency-groups]
+dev = [
+    "pip-audit>=2.10.1",
+]

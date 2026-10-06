@@ -14,10 +14,29 @@ body {
   outline-offset: 2px;
 }
 
-.home {
-  max-width: 40rem;
-  margin: 0 auto;
-  padding: 4rem 1.5rem;
+button,
+input,
+textarea {
+  font: inherit;
+  color: #172026;
+}
+
+button {
+  background: #145e66;
+  color: #ffffff;
+  border: 0;
+  border-radius: 0.25rem;
+  padding: 0.45rem 0.8rem;
+  cursor: pointer;
+}
+
+button:disabled {
+  background: #6d7c82;
+  cursor: not-allowed;
+}
+
+a {
+  color: #0f4c54;
 }
 
 .brand {
@@ -26,7 +45,284 @@ body {
   font-weight: 600;
 }
 
-h1 {
-  margin: 0.5rem 0 1rem;
-  font-size: 2.5rem;
+.product {
+  margin: 0.25rem 0 0;
+}
+
+.login {
+  max-width: 28rem;
+  margin: 0 auto;
+  padding: 3rem 1.5rem;
+}
+
+.login form,
+.chat form {
+  display: grid;
+  gap: 0.4rem;
+  margin-top: 1rem;
+}
+
+.login input,
+.chat textarea,
+.chat select,
+.sidebar input {
+  border: 1px solid #8aa0a6;
+  border-radius: 0.25rem;
+  padding: 0.45rem 0.6rem;
+  background: #ffffff;
+}
+
+.shell {
+  display: grid;
+  grid-template-columns: 18rem 1fr;
+  min-height: 100vh;
+}
+
+.sidebar {
+  padding: 1rem;
+  background: #e7eef0;
+  border-right: 1px solid #c5d2d6;
+}
+
+.sidebar ul {
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0;
+}
+
+.sidebar li {
+  display: grid;
+  gap: 0.35rem;
+  margin-bottom: 0.8rem;
+}
+
+.workspace {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.8rem 1rem;
+  border-bottom: 1px solid #c5d2d6;
+  background: #ffffff;
+}
+
+.topbar p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.chat {
+  padding: 1rem;
+}
+
+.independence {
+  margin-top: 0;
+}
+
+.messages {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 1rem;
+}
+
+.message-text {
+  white-space: pre-wrap;
+  margin: 0.25rem 0;
+}
+
+.messages h2 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.citations {
+  padding-left: 1.2rem;
+}
+
+.citation-label {
+  font-weight: 600;
+}
+
+.feedback {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.feedback p {
+  margin: 0;
+}
+
+button[aria-pressed="true"] {
+  outline: 2px solid #172026;
+}
+
+.admin-nav {
+  display: grid;
+  gap: 0.35rem;
+  margin: 1rem 0;
+}
+
+.admin-nav a {
+  text-decoration: none;
+}
+
+.admin-nav a[aria-current="page"] {
+  font-weight: 700;
+}
+
+.panel {
+  padding: 1rem;
+  display: grid;
+  gap: 1rem;
+  align-content: start;
+}
+
+.panel form,
+.stack {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.panel input,
+.panel select,
+.sidebar select {
+  border: 1px solid #8aa0a6;
+  border-radius: 0.25rem;
+  padding: 0.45rem 0.6rem;
+  background: #ffffff;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+table.data {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.documents-table {
+  width: max-content;
+  min-width: 100%;
+}
+
+.documents-table th,
+.documents-table td {
+  white-space: nowrap;
+}
+
+.documents-table .cell-name {
+  max-width: 18rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.documents-table .cell-actions {
+  width: 1%;
+}
+
+.documents-table .actions {
+  flex-wrap: nowrap;
+}
+
+.file-action {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  background: #ffffff;
+  color: #172026;
+  border: 1px solid #8aa0a6;
+  border-radius: 0.25rem;
+  padding: 0.45rem 0.8rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.file-action-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.documents-table .file-action-input {
+  border: 0;
+  padding: 0;
+  background: transparent;
+}
+
+table.data th,
+table.data td {
+  text-align: left;
+  padding: 0.45rem;
+  border-bottom: 1px solid #c5d2d6;
+  vertical-align: top;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+button.secondary {
+  background: #ffffff;
+  color: #172026;
+  border: 1px solid #8aa0a6;
+}
+
+button.secondary:disabled {
+  background: #6d7c82;
+  color: #ffffff;
+}
+
+dialog {
+  border: 1px solid #c5d2d6;
+  border-radius: 0.4rem;
+  max-width: 32rem;
+  padding: 1rem;
+}
+
+dialog::backdrop {
+  background: rgba(23, 32, 38, 0.45);
+}
+
+.secret {
+  font-family: Consolas, monospace;
+  overflow-wrap: anywhere;
+}
+
+.dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+progress {
+  width: 100%;
+}
+
+@media (max-width: 800px) {
+  .shell {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    border-right: 0;
+    border-bottom: 1px solid #c5d2d6;
+  }
 }

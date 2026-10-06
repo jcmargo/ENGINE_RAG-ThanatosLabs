@@ -13,7 +13,9 @@ from app.persistence.scoped import TenantScopedRepository
 _GLOBAL_REPOSITORIES = frozenset(
     {
         "SqlAlchemyActivationTokenRepository",
+        "SqlAlchemyLifecycleRepository",
         "SqlAlchemyApiKeyRepository",
+        "SqlAlchemyAuditRepository",
         "SqlAlchemyAuthSessionRepository",
         "SqlAlchemyMembershipRepository",
         "SqlAlchemyTenantRepository",
@@ -24,7 +26,11 @@ _GLOBAL_REPOSITORIES = frozenset(
 
 def test_only_auth_dependencies_construct_tenant_context() -> None:
     app_root = repository_root() / "backend" / "app"
-    allowed = (app_root / "api" / "deps.py").resolve()
+    allowed = {
+        (app_root / "api" / "deps.py").resolve(),
+        (app_root / "ingestion" / "context.py").resolve(),
+        (app_root / "evaluation" / "context.py").resolve(),
+    }
     offenders: list[Path] = []
     for path in app_root.rglob("*.py"):
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
@@ -35,7 +41,7 @@ def test_only_auth_dependencies_construct_tenant_context() -> None:
             name = func.id if isinstance(func, ast.Name) else None
             if isinstance(func, ast.Attribute):
                 name = func.attr
-            if name == "TenantContext" and path.resolve() != allowed:
+            if name == "TenantContext" and path.resolve() not in allowed:
                 offenders.append(path)
     assert offenders == []
 

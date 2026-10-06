@@ -36,7 +36,9 @@ async def require_authenticated(
     authorization = request.headers.get("Authorization")
     if credentials is not None:
         authorization = f"{credentials.scheme} {credentials.credentials}"
-    return await auth_service.resolve_bearer(authorization)
+    principal = await auth_service.resolve_bearer(authorization)
+    request.state.principal = principal
+    return principal
 
 
 async def require_provider_admin(
@@ -70,6 +72,41 @@ async def require_tenant_context(
     return build_tenant_context(principal)
 
 
+async def require_documents_read(
+    principal: Annotated[AuthPrincipal, Depends(require_authenticated)],
+) -> TenantContext:
+    """Lectura de documentos: tenant admin o API key con `documents:read`."""
+    return _document_context(principal, ApiKeyScope.DOCUMENTS_READ)
+
+
+async def require_documents_write(
+    principal: Annotated[AuthPrincipal, Depends(require_authenticated)],
+) -> TenantContext:
+    """Escritura de documentos: tenant admin o API key con `documents:write`."""
+    return _document_context(principal, ApiKeyScope.DOCUMENTS_WRITE)
+
+
+def _document_context(principal: AuthPrincipal, scope: ApiKeyScope) -> TenantContext:
+    if principal.type is PrincipalType.TENANT_ADMIN:
+        return build_tenant_context(principal)
+    if principal.type is PrincipalType.API_KEY:
+        require_principal_scope(principal, scope)
+        return build_tenant_context(principal)
+    raise AuthorizationError
+
+
+async def require_query_context(
+    principal: Annotated[AuthPrincipal, Depends(require_authenticated)],
+) -> TenantContext:
+    """Preguntas: usuario de empresa activo o API key con scope `query`."""
+    if principal.type in {PrincipalType.TENANT_ADMIN, PrincipalType.MEMBER}:
+        return build_tenant_context(principal)
+    if principal.type is PrincipalType.API_KEY:
+        require_principal_scope(principal, ApiKeyScope.QUERY)
+        return build_tenant_context(principal)
+    raise AuthorizationError
+
+
 def require_scope(scope: str) -> AuthDependency:
     """Exige un scope concreto en el principal autenticado."""
 
@@ -97,7 +134,10 @@ __all__ = [
     "InvalidScopeDefinitionError",
     "get_auth_service",
     "require_authenticated",
+    "require_documents_read",
+    "require_documents_write",
     "require_provider_admin",
+    "require_query_context",
     "require_scope",
     "require_tenant_admin",
     "require_tenant_context",

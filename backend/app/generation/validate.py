@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from app.generation.errors import GenerationFormatError, UngroundedAnswerError
 from app.generation.models import PUBLIC_ABSTENTION, Citation
 from app.generation.prompt import source_label
+from app.retrieval.identifiers import is_label_only, statement_text
 from app.retrieval.sample_search import LocalSearchHit
 
 
@@ -68,9 +69,20 @@ def ground_output(
     if not citations:
         message = "La respuesta no se acepta porque no cita un fragmento recuperado"
         raise UngroundedAnswerError(message)
-    if not _cited_numbers_are_supported(output.answer, cited_hits):
+    answer = _statement_if_label_only(output.answer, cited_hits)
+    if not _cited_numbers_are_supported(answer, cited_hits):
         return PUBLIC_ABSTENTION, True, ()
-    return output.answer, False, tuple(citations)
+    return answer, False, tuple(citations)
+
+
+def _statement_if_label_only(answer: str, hits: Sequence[LocalSearchHit]) -> str:
+    """Un modelo pequeño a veces copia solo «7.4.4». El enunciado ya está en el fragmento."""
+    if not is_label_only(answer) or not _cited_numbers_are_supported(answer, hits):
+        return answer
+    statement = statement_text("\n\n".join(hit.result.chunk.text for hit in hits))
+    if is_label_only(statement):
+        return answer
+    return statement
 
 
 def _cited_numbers_are_supported(answer: str, hits: Sequence[LocalSearchHit]) -> bool:

@@ -8,9 +8,17 @@ es idéntico al de un id que no existe.
 
 
 def assert_hidden_like_missing(*, status_code: int, body: object, missing_body: object) -> None:
-    """Un recurso ajeno no se distingue de uno inexistente."""
+    """Un recurso ajeno no se distingue de uno inexistente.
+
+    El `request_id` cambia en cada solicitud. El código y el mensaje no.
+    """
     assert status_code == 404
-    assert body == missing_body
+    assert isinstance(body, dict)
+    assert isinstance(missing_body, dict)
+    assert set(body) == {"code", "detail", "request_id"}
+    assert set(missing_body) == {"code", "detail", "request_id"}
+    assert body["code"] == missing_body["code"]
+    assert body["detail"] == missing_body["detail"]
 
 
 def assert_page_excludes_foreign(
