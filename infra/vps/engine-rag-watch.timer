@@ -1,0 +1,11 @@
+[Unit]
+Description=Engine RAG vigilancia cada cinco minutos
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+Persistent=true
+Unit=engine-rag-watch.service
+
+[Install]
+WantedBy=timers.target

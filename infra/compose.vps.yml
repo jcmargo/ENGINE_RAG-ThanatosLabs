@@ -1,0 +1,66 @@
+# Overlay del VPS. Se combina con compose.yml y no lo sustituye.
+# Publica solo 80/443. Postgres, Qdrant, la API y Ollama no tienen puerto público.
+# Requiere Docker Compose 2.24 o posterior por `!override`.
+
+services:
+  gateway:
+    cap_add:
+      - NET_BIND_SERVICE
+    environment:
+      RAG_TLS_MODE: public
+      RAG_PUBLIC_HTTPS: "true"
+      RAG_DOMAIN: ${RAG_DOMAIN:?RAG_DOMAIN}
+    ports: !override
+      - "80:80"
+      - "443:443"
+    tmpfs: !override
+      - /tmp:mode=1777
+      - /config:mode=1777
+    volumes:
+      - engine_rag_caddy:/data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
+
+  api:
+    environment:
+      RAG_OLLAMA_BASE_URL: http://172.28.0.1:11434
+      RAG_CORS_ORIGINS: https://${RAG_DOMAIN:?RAG_DOMAIN}
+      RAG_PUBLIC_HTTPS: "true"
+      RAG_REFRESH_COOKIE_SECURE: "true"
+      RESTIC_REPOSITORY: ${RESTIC_REPOSITORY:-}
+
+  worker:
+    environment:
+      RAG_OLLAMA_BASE_URL: http://172.28.0.1:11434
+      RESTIC_REPOSITORY: ${RESTIC_REPOSITORY:-}
+
+  init-data:
+    volumes:
+      - engine_rag_caddy:/data/caddy
+
+  backup:
+    environment:
+      RESTIC_REPOSITORY: ${RESTIC_REPOSITORY:-}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        case "$$RESTIC_REPOSITORY" in
+          s3:*|sftp:*|rest:*|rclone:*|b2:*|azure:*|gs:*|swift:*)
+            exec python -m app.cli.backup
+            ;;
+          *)
+            echo "backup status=blocked reason=external-repository-required" >&2
+            exit 1
+            ;;
+        esac
+
+networks:
+  egress:
+    ipam:
+      config:
+        - subnet: 172.28.0.0/24
+          gateway: 172.28.0.1
+
+volumes:
+  engine_rag_caddy:
+    name: engine_rag_caddy

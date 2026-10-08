@@ -28,9 +28,13 @@ ENV UV_COMPILE_BYTECODE=1 \
 COPY pyproject.toml uv.lock ./
 COPY backend/pyproject.toml backend/pyproject.toml
 COPY backend/app backend/app
+# uv cachea el wheel del paquete local por pyproject.toml, no por los .py.
+# Sin refresh se reinstala un wheel anterior que omitía app/persistence/models.
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --no-editable --package engine-rag-backend \
-    && /app/.venv/bin/python -m compileall -q /app/.venv/lib/python3.12/site-packages /app/backend/app
+        --refresh-package engine-rag-backend \
+    && /app/.venv/bin/python -m compileall -q /app/.venv/lib/python3.12/site-packages /app/backend/app \
+    && /app/.venv/bin/python -c "import app.persistence.models"
 
 FROM python:3.12-slim-bookworm@sha256:54c85f3c47607a77f32adec749d3c81d1348bf25833671f512b26a9b6d778cb3 AS runtime
 

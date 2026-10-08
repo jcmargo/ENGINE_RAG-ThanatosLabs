@@ -15,9 +15,10 @@ USER root
 RUN apk upgrade --no-cache
 
 COPY infra/Caddyfile /etc/caddy/Caddyfile.template
+COPY infra/Caddyfile.public /etc/caddy/Caddyfile.public
 COPY infra/gateway-entrypoint.sh /entrypoint.sh
 COPY --from=build /src/dist /srv
-RUN sed -i 's/\r$//' /entrypoint.sh /etc/caddy/Caddyfile.template \
+RUN sed -i 's/\r$//' /entrypoint.sh /etc/caddy/Caddyfile.template /etc/caddy/Caddyfile.public \
     && chmod 755 /entrypoint.sh
 
 ARG ENGINE_RAG_VERSION=0.1.0
@@ -32,5 +33,5 @@ LABEL org.opencontainers.image.title="Engine RAG gateway" \
       org.opencontainers.image.url="" \
       org.opencontainers.image.documentation=""
 
-EXPOSE 8080
+EXPOSE 8080 80 443
 ENTRYPOINT ["/entrypoint.sh"]

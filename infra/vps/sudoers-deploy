@@ -1,0 +1,1 @@
+deploy ALL=(root) NOPASSWD: /opt/engine-rag/bin/engine-rag-deploy, /opt/engine-rag/bin/engine-rag-update, /opt/engine-rag/bin/engine-rag-rollback, /opt/engine-rag/bin/engine-rag-status, /opt/engine-rag/bin/engine-rag-lock-ssh, /opt/engine-rag/bin/engine-rag-reboot

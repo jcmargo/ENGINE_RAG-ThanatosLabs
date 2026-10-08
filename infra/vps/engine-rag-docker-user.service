@@ -1,0 +1,13 @@
+[Unit]
+Description=Cierra en DOCKER-USER los puertos que no son públicos
+After=docker.service
+PartOf=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/opt/engine-rag/bin/engine-rag-docker-user
+
+[Install]
+WantedBy=docker.service multi-user.target

@@ -1,0 +1,7 @@
+[Unit]
+Description=Engine RAG vigilancia de disco, memoria, salud y cola
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/engine-rag/bin/engine-rag-watch

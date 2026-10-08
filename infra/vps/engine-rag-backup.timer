@@ -1,0 +1,11 @@
+[Unit]
+Description=Engine RAG backup diario
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+RandomizedDelaySec=30m
+Unit=engine-rag-backup.service
+
+[Install]
+WantedBy=timers.target
