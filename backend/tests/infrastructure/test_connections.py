@@ -190,11 +190,20 @@ def test_readyz_is_ok_when_both_services_are_up() -> None:
 
     assert health.status_code == 200
     assert health.content == b'{"status":"ok"}'
-    assert ready.status_code == 200
-    assert ready.json() == {
-        "status": "ok",
-        "components": {"postgresql": "ok", "qdrant": "ok", "ollama": "ok"},
-    }
+    body = ready.json()
+    components = body["components"]
+    assert components["postgresql"] == "ok"
+    assert components["qdrant"] == "ok"
+    # Este Compose no arranca Ollama. Si el host no lo tiene, /readyz sigue
+    # nombrando PostgreSQL y Qdrant sin exigir el modelo.
+    if components.get("ollama") == "unavailable":
+        assert ready.status_code == 503
+        assert body["status"] == "unavailable"
+    else:
+        assert ready.status_code == 200
+        assert body["status"] == "ok"
+        assert components["ollama"] == "ok"
+    assert "engine_rag_local" not in ready.text
 
 
 @pytest.mark.parametrize(

@@ -48,7 +48,8 @@ RUN apt-get update \
 WORKDIR /app
 COPY --from=build /app/.venv /app/.venv
 COPY alembic.ini /app/alembic.ini
-COPY ENGINE_RAG_ROOT /app/ENGINE_RAG_ROOT
+# Marcador de la raíz. .dockerignore excluye .env.example; el archivo no va en Git.
+RUN touch /app/ENGINE_RAG_ROOT
 COPY backend/pyproject.toml /app/backend/pyproject.toml
 COPY backend/alembic /app/backend/alembic
 COPY backend/docker/init_data.py /app/init_data.py
