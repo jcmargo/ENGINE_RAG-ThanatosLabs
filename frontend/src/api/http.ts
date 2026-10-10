@@ -152,6 +152,23 @@ export async function login(input: LoginInput): Promise<Session> {
   return next;
 }
 
+export async function activateAccount(input: { token: string; password: string }): Promise<void> {
+  const requestId = crypto.randomUUID();
+  const body: components["schemas"]["ActivateRequest"] = {
+    token: input.token,
+    password: input.password,
+  };
+  const response = await fetch("/v1/auth/activate", {
+    method: "POST",
+    credentials: "include",
+    headers: jsonHeaders(requestId),
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    throw await toApiError(response, requestId);
+  }
+}
+
 export async function logoutRequest(): Promise<void> {
   const requestId = crypto.randomUUID();
   try {

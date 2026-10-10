@@ -89,6 +89,28 @@ Remove-Item Env:RAG_BOOTSTRAP_ADMIN_PASSWORD
 
 Si ya existe un provider admin, el comando termina con error y no crea otro.
 
+**Pantalla.** En el login, **Activar cuenta** abre `/activate`. Quien ya inició sesión no entra: la ruta usa la misma puerta que `/login`. Primero se pega el token. Después, en **Crear contraseña**, se escribe la contraseña y se confirma. Si no coinciden o están vacías, no se envía nada. Si el servidor responde 204, se vuelve al login con el aviso de que ya se puede entrar con la empresa (slug), el correo y esa contraseña. Activar no inicia sesión. Si el token está vencido, usado o no existe, la pantalla muestra `Token de activación inválido`. El token caduca a las 72 horas y la API no distingue esos tres casos.
+
+**API.** El mismo resultado se obtiene sin la pantalla. `POST /v1/auth/activate` recibe JSON con `token` y `password`. La confirmación no se envía. HTTP 204, sin cuerpo, deja la cuenta lista para entrar con el slug, el correo y la contraseña elegida. No se emite cookie. Un 401 devuelve el detalle `Token de activación inválido` tanto si el token venció, como si ya se usó, como si no existe.
+
+PowerShell, contra la API local:
+
+```powershell
+$body = @{ token = "<token-de-activacion>"; password = "<contraseña-elegida>" } | ConvertTo-Json
+$response = Invoke-WebRequest -Uri http://127.0.0.1:8000/v1/auth/activate -Method POST -ContentType "application/json; charset=utf-8" -Body $body -UseBasicParsing
+$response.StatusCode
+```
+
+El valor esperado es `204`.
+
+curl:
+
+```bash
+curl -sS -o /dev/null -w "%{http_code}\n" -X POST http://127.0.0.1:8000/v1/auth/activate -H "Content-Type: application/json" -d "{\"token\":\"<token-de-activacion>\",\"password\":\"<contraseña-elegida>\"}"
+```
+
+La salida esperada es `204`.
+
 ## Arranque
 
 Usa dos ventanas de PowerShell, ambas en la raíz del repositorio.

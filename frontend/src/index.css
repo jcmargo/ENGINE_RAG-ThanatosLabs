@@ -55,6 +55,10 @@ a {
   padding: 3rem 1.5rem;
 }
 
+.login .account-link {
+  margin-top: 1rem;
+}
+
 .login form,
 .chat form {
   display: grid;

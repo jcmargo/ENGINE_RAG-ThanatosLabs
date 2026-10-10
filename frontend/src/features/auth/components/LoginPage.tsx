@@ -1,10 +1,22 @@
 import { useState, type FormEvent } from "react";
+import { Link, useLocation } from "react-router";
 
 import { asApiError, type ApiError } from "../../../api/http.ts";
 import { useAuth } from "../auth-context.ts";
 
+export const ACTIVATION_READY_NOTICE =
+  "Ya se puede entrar con la empresa (slug), el correo y la contraseña elegida.";
+
+function showActivationNotice(state: unknown): boolean {
+  if (typeof state !== "object" || state === null || !("activated" in state)) {
+    return false;
+  }
+  return state.activated === true;
+}
+
 export function LoginPage() {
   const { login, bootError } = useAuth();
+  const activated = showActivationNotice(useLocation().state);
   const [tenantSlug, setTenantSlug] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -70,6 +82,10 @@ export function LoginPage() {
           Entrar
         </button>
       </form>
+      <p className="account-link">
+        <Link to="/activate">Activar cuenta</Link>
+      </p>
+      {activated ? <p role="status">{ACTIVATION_READY_NOTICE}</p> : null}
       {pending ? <p role="status">Comprobando credenciales</p> : null}
       {visibleError ? (
         <p role="alert">

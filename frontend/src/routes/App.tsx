@@ -5,6 +5,7 @@ import { ApiKeysPage } from "../features/admin/keys/ApiKeysPage.tsx";
 import { UsagePage } from "../features/admin/usage/UsagePage.tsx";
 import { UsersPage } from "../features/admin/users/UsersPage.tsx";
 import { AuthProvider } from "../features/auth/components/AuthProvider.tsx";
+import { ActivatePage } from "../features/auth/components/ActivatePage.tsx";
 import { LoginPage } from "../features/auth/components/LoginPage.tsx";
 import {
   EmployeeOnly,
@@ -28,6 +29,14 @@ export function AppRoutes() {
           element={
             <GuestOnly>
               <LoginPage />
+            </GuestOnly>
+          }
+        />
+        <Route
+          path="/activate"
+          element={
+            <GuestOnly>
+              <ActivatePage />
             </GuestOnly>
           }
         />
